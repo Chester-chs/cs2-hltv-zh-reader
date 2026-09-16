@@ -1,0 +1,22 @@
+{
+  "name": "cs2-chinese-match-reader",
+  "version": "0.0.1",
+  "type": "module",
+  "description": "A log-only browser extension scaffold for hltv.org pages.",
+  "main": "index.js",
+  "scripts": {
+    "build": "vite build --mode background && vite build --mode content",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [],
+  "author": "Chester-chs",
+  "license": "MIT",
+  "dependencies": {
+    "webextension-polyfill": "^0.12.0"
+  },
+  "devDependencies": {
+    "@types/webextension-polyfill": "^0.12.6",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.0"
+  }
+}

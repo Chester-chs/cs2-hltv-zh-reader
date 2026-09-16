@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "CS2 HLTV Chinese Reader",
+  "version": "0.0.1",
+  "description": "A log-only browser extension scaffold for hltv.org pages.",
+  "background": {
+    "scripts": ["background.js"],
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.hltv.org/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "permissions": ["storage"],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "cs2-hltv-zh-reader@chester-chs.github.io"
+    }
+  }
+}
