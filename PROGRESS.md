@@ -38,7 +38,21 @@ Status: implementation and build complete; Gate 2 is pending owner-run browser v
 - The bare import/export check returned `rg_exit=1` and `NO_BARE_IMPORT_EXPORT_FOUND`.
 - Manifest paths resolve to existing files: `background.js`, `background.js`, and `content.js`.
 - `git ls-files -- dist` returned no tracked files; `dist/` is ignored by `.gitignore`.
-- Gate 2 was not run. The owner must perform the Chrome, Edge, and Firefox loading checks separately.
+- Gate 2 is not fully passed. Edge was externally auto-validated, but Chrome and Firefox still require manual loading verification.
+
+### Gate 2 partial external pre-validation
+
+- Edge: automatic validation passed. The service worker was alive and read the manifest internally: worker id `aiginabjibgaalcealemidoceijokeka`, version `0.0.1`, and name `CS2 HLTV Chinese Reader`. On `https://www.hltv.org/`, the content log was `[cs2-hltv-zh] content script injected at https://www.hltv.org/`. The HTTP response was `200`, the title was `Counter-Strike News & Coverage | HLTV.org`, and no Cloudflare challenge page appeared.
+- Chrome: manual validation required. Playwright automation could not load the extension because Chrome rejected `--load-extension` under its official browser security restriction; CDP `Extensions.loadUnpacked` accepted the path but did not activate the extension. This is an automation limitation, not an extension defect.
+- Firefox: manual validation required. The Playwright Firefox build does not support loading unsigned extensions (`backgroundPages=0`). This is an automation limitation, not an extension defect.
+- Additional evidence: Playwright's supported Chromium host passed both background and content validation, and produced the same extension ID as Edge (`aiginabjibgaalcealemidoceijokeka`). This supports that the built artifacts and manifest are healthy.
+- Gate 2 remains incomplete until the Chrome and Firefox manual checks pass. The Edge and Playwright Chromium results do not substitute for those two checks.
+
+### Pending manual Gate 2 checks
+
+- Chrome: open `chrome://extensions`, enable Developer mode, choose **Load unpacked**, and select `C:\ChatGPT\HLTV\dist`. Open the extension service worker's **Inspect** console for the background log, then open `https://www.hltv.org/` and use the page DevTools **Console** for the content log. Expected messages are `[cs2-hltv-zh] background started (version 0.0.1)` and `[cs2-hltv-zh] content script injected at https://www.hltv.org/`.
+- Firefox: open `about:debugging#/runtime/this-firefox`, choose **Load Temporary Add-on**, and select `C:\ChatGPT\HLTV\dist\manifest.json`. Use the Add-on Toolbox Console when its **Inspect** entry is available; otherwise use **Browser Console**. In the filtering controls, enable **Info**, **Logs**, **Errors**, and **Warnings**, because `console.log` is Info-level. Use the page DevTools **Console** for the content log. If neither Add-on Toolbox nor Browser Console shows the background log, Gate 2 fails; it is not a known limitation.
+- Firefox test record: Firefox `156.0`, executable `C:\Program Files\Mozilla Firefox\firefox.exe`. The temporary extension must be reloaded after each browser restart.
 
 ### Gate 2 Firefox notes
 
