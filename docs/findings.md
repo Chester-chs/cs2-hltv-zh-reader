@@ -1,16 +1,17 @@
 # Gate 3 Findings
 
-Status: reconnaissance outputs recorded for the current Chrome and Edge scope. The page and script evidence is sufficient to classify the three sampled page types as server-rendered HTML with native JavaScript and no observed framework-owned virtual DOM. P0-3 remains `Unable to confirm`, so the display architecture is not cleared for implementation.
+Status: reconnaissance outputs recorded for the current Chrome and Edge scope. The page and script evidence is sufficient to classify the three sampled page types as server-rendered HTML with native JavaScript and no observed framework-owned virtual DOM. P0-3 is resolved for `/matches`, while the page-specific CSS checks for news and match-detail containers remain `Unable to confirm`; Gate 4 owner review is still required before implementation.
 
 Access date: 2026-09-20. Capture requests used `curl.exe` with a full Chrome-style browser user agent and `Accept-Language: en-US`, sequentially with at least two seconds between requests. No Puppeteer, Playwright, parallel request, or retry loop was used.
 
 ## 1. Capture set and provenance
 
-The project owner's `/matches` facts below are adopted without re-fetching that page. The owner-reported raw files were not present in the current working tree, so no new conclusion is derived from an absent local copy.
+The `/matches` HTML and primary stylesheet were re-fetched locally on 2026-09-20 under the explicit P0-3 authorization. The HTML request and stylesheet request were sequential and separated by at least two seconds; both returned HTTP 200. The other page captures remain the single, previously recorded curl captures.
 
 | Page kind | Exact URL | Status / body size | Evidence reference |
 |---|---|---:|---|
-| Match list | `https://www.hltv.org/matches` | HTTP 200 / 1,243,948 bytes | Owner-supplied `raw-capture/gate3/matches.html` and `scripts/s1..s10.js`; not re-fetched |
+| Match list | `https://www.hltv.org/matches` | HTTP 200 / 1,247,718 local bytes | Local re-fetch: `raw-capture/gate3/matches.html` and `matches.headers.txt`; supplied scripts remain the script-scan source |
+| Match-list stylesheet | `https://resources.hltv.org/hltv-everything.css/fdddc7f98fef6cb157c3efd609bb3360.css` | HTTP 200 / 2,524,977 local bytes | Local re-fetch: `raw-capture/gate3/matches-style.css` and `matches-style.headers.txt` |
 | News list | `https://www.hltv.org/news/archive/2026/september` | HTTP 200 / 354,590 local bytes | `raw-capture/gate3/news-list.html` and `news-list.headers.txt` |
 | News article | `https://www.hltv.org/news/45557/50000-winline-cis-lan-season-9-announced` | HTTP 200 / 214,043 local bytes | `raw-capture/gate3/news-article.html` and `news-article.headers.txt` |
 | Match detail | `https://www.hltv.org/matches/2398108/aurora-vs-vitality-starladder-starseries-fall-2026` | HTTP 200 / 586,917 local bytes | `raw-capture/gate3/match-detail.html` and `match-detail.headers.txt` |
@@ -19,11 +20,13 @@ The news-list URL was resolved without guessing a stale article URL. `https://ww
 
 Supporting captures are local-only under `raw-capture/gate3/` and are ignored by Git.
 
+The local re-fetch differs from the handoff byte counts: the handoff reported 1,243,948 bytes for the HTML and 2,524,946 bytes for the stylesheet; the local files are 1,247,718 bytes (+3,770) and 2,524,977 bytes (+31), respectively. The cause of the byte-size difference was not established. The P0-3 conclusion below follows the local re-fetch and records the supplied facts only where they remain applicable.
+
 ## 2. Interception and server-rendering checks
 
-### Match list: owner-supplied facts
+### Match list: local targeted re-fetch
 
-- HTTP 200, 1,243,948 bytes, title `Counter-Strike Matches & livescore | HLTV.org`.
+- HTTP 200, 1,247,718 local bytes, title `Counter-Strike Matches & livescore | HLTV.org`.
 - Headers contained `CF-Ray`, `CF-Cache-Status: DYNAMIC`, and `Server: cloudflare`, but no `cf-mitigated` header.
 - No challenge/interstitial title or body signature was present.
 - The complete 1.24 MB HTML contained zero occurrences of the recorded React, Next, Nuxt, Vue, Svelte, Angular, and Alpine markers.
@@ -43,7 +46,7 @@ The framework scan covered `__REACT_DEVTOOLS_GLOBAL_HOOK__`, `data-reactroot`, `
 
 Each new page referenced the same `hltv-CL7PLUBn.js` bundle, but none contained an `hx-*` activation attribute. The htmx identification and byte/identifier count above come from the supplied `/matches` bundle inspection and are applied to the same immutable asset URL.
 
-The three new response headers contained no `Content-Security-Policy` or `Content-Security-Policy-Report-Only` header. CSP for the owner-supplied `/matches` response is `Unable to confirm` because its raw header file was not available in this workspace and the page was not re-fetched.
+The three new response headers contained no `Content-Security-Policy` or `Content-Security-Policy-Report-Only` header. The local `/matches` response headers and stylesheet headers also contained no CSP header.
 
 Conclusion for the sampled pages: the initial view is SSR HTML, with native JavaScript enhancing selected behavior. No React/Vue/Svelte-style virtual-DOM ownership was found. This conclusion is limited to the three captured page types and the supplied `/matches` scan; it is not a claim about every HLTV route.
 
@@ -63,7 +66,7 @@ The match-detail page contains a `match-page`, team/event sections, a `data-live
 
 ### Match list
 
-The supplied inventory reports 207 `match-teamname`, 1,573 `match-event`, 452 `match-stage`, 457 `match-meta`, 442 `match-time`, 20 `current-map-score`, and 5 `match-team-livescore` elements. The supplied target-class script search reported `match-teamname=0`, `match-event=0`, `match-meta=0`, `match-stage=0`, `match-team=0`, `match-wrapper=2`, `current-map-score=3`, and `match-time=1` in script bodies. Team/event/stage/meta output is static in the inspected scripts; current time and score fields are dynamic targets. The supplied ten-script scan covered 1,236,708 bytes and found `children[0]=0`, `firstElementChild=0`, `lastElementChild=0`, `childNodes[=1`, `.children[=1`, and `nth-child=2`; the one `childNodes[0]` hit belonged to htmx fragment handling, the one `.children[` hit belonged to gtag traversal, and neither targeted match containers.
+The local re-fetch reports 207 `match-teamname`, 1,573 `match-event`, 452 `match-stage`, 457 `match-meta`, 442 `match-time`, 20 `current-map-score`, and 5 `match-team-livescore` elements. The supplied target-class script search reported `match-teamname=0`, `match-event=0`, `match-meta=0`, `match-stage=0`, `match-team=0`, `match-wrapper=2`, `current-map-score=3`, and `match-time=1` in script bodies. Team/event/stage/meta output is static in the inspected scripts; current time and score fields are dynamic targets. The supplied ten-script scan covered 1,236,708 bytes and found `children[0]=0`, `firstElementChild=0`, `lastElementChild=0`, `childNodes[=1`, `.children[=1`, and `nth-child=2`; the one `childNodes[0]` hit belonged to htmx fragment handling, the one `.children[` hit belonged to gtag traversal, and neither targeted match containers.
 
 ## 4. P0-1: page-type consistency
 
@@ -93,19 +96,41 @@ The runtime handshake, reconnect behavior, and observed message interval are `Un
 
 ## 6. P0-3: sibling insertion and CSS position dependence
 
-The new news-list, news-article, and match-detail HTML files contain zero occurrences of `:nth-child`, `:first-child`, or `:last-child`. The captured `hltv-csstheme.js` file also contains zero occurrences of those selectors and contains only theme/class initialization code, not target-container CSS rules.
+Capture evidence for this section (2026-09-20):
 
-For the actual `/matches` targets, the required parent-level check is `Unable to confirm`. The owner-supplied facts give target counts and script-scan results but do not include the parent-selector result, and the referenced `raw-capture/gate3/matches.html` was not available locally. The page was not re-fetched because the handoff explicitly says to adopt its confirmed facts and not repeat that capture.
+- HTML: `https://www.hltv.org/matches`, HTTP 200, 1,247,718 local bytes, `raw-capture/gate3/matches.html`.
+- Stylesheet: `https://resources.hltv.org/hltv-everything.css/fdddc7f98fef6cb157c3efd609bb3360.css`, HTTP 200, 2,524,977 local bytes, `raw-capture/gate3/matches-style.css`.
+- Both requests used `curl.exe` with the full Chrome-style user agent and `Accept-Language: en-US`. They were sequential, with at least two seconds between them, and no retry loop was used.
 
-Consequences:
+The local HTML contains the target structure:
 
-- The low script-level positional risk is evidence against one class of breakage, not proof that a sibling insertion is safe.
-- Mode B must remain withheld for any element whose parent-level CSS/DOM dependency has not been inspected.
-- No architecture decision may rely on the absence of `:nth-child` in the unrelated pages as proof for match-list containers.
+```html
+<div class="match-team">
+  <div class="match-team-logo-container"><img ...></div>
+  <div class="match-teamname text-ellipsis">Aurora</div>
+</div>
+```
+
+The 2,524,977-byte stylesheet scan found zero occurrences for each target-parent pattern: `.match-team:nth`, `.match-team:first`, `.match-team:last`, `.match-teams:nth`, `.match-teams:first`, `.match-teams:last`, `.match-teamname:nth`, `.match-teamname:first`, `.match-teamname:last`, `.match-info:nth`, and `.match-info:last`. The actual positional selectors found in the relevant match-list CSS were:
+
+- `.matches-v4 .matches-chronologically .match-time-wrapper:nth-child(2)`
+- `.matches-v4 .matches-chronologically .match-time-wrapper:last-child`
+
+`.match-time-wrapper` is the card-list layer, not the parent of `.match-teamname`. Appending a sibling inside `.match-team` therefore does not change `.match-time-wrapper`'s index in its parent. Position-shift risk on the target parent was not found in this scan. This is a scoped static-CSS result, not proof about other routes or future styles.
+
+The real constraint found in the same stylesheet is dimension-related:
+
+- Bilingual insertion is structurally feasible for `match-teamname`, `match-event`, and `match-time` on `/matches`. `.text-ellipsis` has overflow/ellipsis/nowrap but no fixed width; `.matches-v4 .match-event` is flex-based with `flex:1`; `.matches-v4 .match-teamname` has font-size rules but no width rule; and `.matches-v4 .match-time` has font-size, weight, and line-height rules but no fixed width rule. The surrounding `.match-team` row is a flex row, and `.match-teams` is a flex column.
+- `match-stage` is dimension-constrained: `.matches-v4 .match-stage` has height and line-height 14px, with fixed widths of 62px, 51px, 45px, and 65px for the grand-final, semifinal, other-playoff, and quarterfinal variants. Extra sibling content can be clipped or overflow, so it is Mode A only.
+- `match-meta` is dimension-constrained: the base rule fixes width at 28px and the narrow-media rule fixes it at 22px. Extra sibling content can be clipped or overflow, so it is Mode A only.
+
+Conclusion: the /matches scan found no target-parent position dependency; the primary Mode B risk is fixed width/height clipping or overflow on `match-stage` and `match-meta`, not positional misalignment. The element-level boundary is therefore: `match-teamname`, `match-event`, and `match-time` are bilingual-feasible candidates; `match-stage` and `match-meta` are Mode A only.
+
+Evidence boundary: these CSS conclusions cover `/matches` only. Parent-level CSS for match-detail `.match-page`/score areas and for news `newsline`/`newstext` was not checked in this pass and remains `Unable to confirm`. No `/matches` conclusion is transferred to those containers. The absence of positional selectors in the previously captured news and match-detail sources is not a substitute for that page-specific parent-CSS check.
 
 ## 7. Layout and runtime limits
 
-No normal/narrow viewport visual measurement, browser reload comparison, or MutationObserver trace was performed in this curl-only pass. Wrapping, overflow, column shift, row-height changes, and selector stability across reloads are therefore `Unable to confirm`. These are recorded as limits rather than inferred from class names.
+No normal/narrow viewport visual measurement, browser reload comparison, or MutationObserver trace was performed in this curl-only pass. The static `/matches` CSS establishes the fixed-dimension constraints above, but the exact rendered clipping or overflow under a future Mode B implementation remains `Unable to confirm`. Runtime behavior and all page-specific layout behavior outside `/matches` remain limits rather than inferences from class names.
 
 ## 8. robots.txt and route-resolution evidence
 
@@ -118,6 +143,7 @@ The captured sitemap index listed `https://www.hltv.org/news-sitemap.xml`. That 
 - Gate 3A: page capture, SSR/framework comparison, sitemap resolution, and static script inspection are recorded.
 - Gate 3B/P0-1: no framework or target-container positional update was found in the supplied/inspected evidence, subject to the scope limits above.
 - P0-2: live scores are wired through the Socket.IO livescore module and `score` events; runtime interval remains unmeasured.
-- Gate 3B/P0-3: `Unable to confirm` for the match-list parent CSS/DOM dependency.
+- Gate 3B/P0-3: resolved for `/matches`. The local CSS scan found no target-parent positional selector; the observed `:nth-child` rules are on `.match-time-wrapper`, while fixed dimensions constrain `match-stage` and `match-meta`.
+- P0-3 remains page-scoped: match-detail `.match-page`/score CSS and news `newsline`/`newstext` parent CSS are `Unable to confirm` because they were not checked.
 
-The P0-3 evidence gap keeps the display architecture decision blocked. The next allowed action is to inspect the owner-supplied match-list HTML/CSS evidence or perform the specifically approved read-only parent-selector check. No display implementation, translation API, DOM insertion, or network interception is authorized by these findings.
+The `/matches` P0-3 evidence gap is closed, but Gate 4 owner review remains required for the element-level boundary and for the uninspected page-specific containers. No display implementation, translation API, DOM insertion, or network interception is authorized by these findings before that review.

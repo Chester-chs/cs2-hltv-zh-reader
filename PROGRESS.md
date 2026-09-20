@@ -76,15 +76,18 @@ Status: implementation and build complete; Gate 2 is complete for the current Ch
 
 ## Gate 3 — Evidence-based reconnaissance
 
-Status: Gate 3 documentation outputs created for the current Chrome and Edge scope. P0-3 remains `Unable to confirm`, so the display architecture decision is still blocked.
+Status: Gate 3 documentation outputs updated for the current Chrome and Edge scope. P0-3 is resolved for `/matches`; page-specific CSS for news and match-detail containers remains `Unable to confirm`, and Gate 4 owner review is still pending.
 
-- Gate 3A: the supplied `/matches` facts were adopted without re-fetching; the current news archive, one news article, and one match-detail page were captured once each with curl and at least two-second request spacing.
+- Gate 3A: the current news archive, one news article, and one match-detail page were captured once each with curl and at least two-second request spacing. Under the explicit P0-3 re-fetch authorization, `/matches` and its primary stylesheet were then captured sequentially with the same curl discipline.
 - News-list URL resolution: `https://www.hltv.org/news` was known to return 404; the current list URL was resolved from home navigation and the sitemap trail as `https://www.hltv.org/news/archive/2026/september`.
 - P0-1: the four sampled page types show SSR HTML, no React/Vue/Svelte/Angular/Alpine markers, no `hx-*` attributes, and no relevant first-party DOM child-position access in the inspected scripts. Runtime SPA navigation and mutation timing remain bounded as `Unable to confirm` because this pass used curl/source evidence rather than a live DevTools trace.
 - P0-2: the preloaded livescore modules establish Socket.IO score delivery from `https://scorebot-lb.hltv.org`; `score` events update `data-livescore-*` nodes. Runtime handshake/reconnect timing was not measured.
-- P0-3: `Unable to confirm` for the `/matches` target parents' `:nth-child`, `:first-child`, and `:last-child` dependencies because the owner-supplied match-list HTML was not present locally and was not re-fetched. Mode B remains withheld for those containers.
+- P0-3: the local 2026-09-20 re-fetch returned HTTP 200 and produced 1,247,718 bytes for `https://www.hltv.org/matches` and 2,524,977 bytes for `https://resources.hltv.org/hltv-everything.css/fdddc7f98fef6cb157c3efd609bb3360.css`. The local evidence is in `raw-capture/gate3/matches.html` and `raw-capture/gate3/matches-style.css`. The handoff sizes were 1,243,948 and 2,524,946 bytes; the difference is recorded, but its cause is not established.
+- The target-parent scan found no `:nth-child`, `:first-child`, or `:last-child` selector for `.match-team`, `.match-teams`, `.match-teamname`, or `.match-info`. The observed positional selectors are on `.match-time-wrapper`, not the `.match-teamname` parent, so position-shift risk was not found in this `/matches` scan.
+- The real `/matches` constraint is dimension-related: `match-teamname`, `match-event`, and `match-time` have no fixed target width rule found in the stylesheet and are bilingual-feasible candidates; `match-stage` and `match-meta` have fixed dimensions and are Mode A only because inserted content may clip or overflow.
+- CSS for match-detail `.match-page`/score areas and news `newsline`/`newstext` parent containers was not checked and remains `Unable to confirm`. No `/matches` CSS conclusion is applied to those routes.
 - Created `docs/findings.md`, `docs/display-strategy.md`, and `docs/compliance.md`. Raw captures remain ignored and local-only.
-- Next allowed action: obtain or inspect the owner-supplied match-list HTML/CSS evidence or perform the specifically approved read-only parent-selector check. No display implementation begins before P0-3 is resolved and Gate 4 owner review is complete.
+- Next allowed action: Gate 4 owner review of the element-level boundary and the uninspected page-specific containers. No display implementation begins before that review is complete.
 
 ## Documentation lesson
 
