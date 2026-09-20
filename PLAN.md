@@ -6,7 +6,7 @@ Status: reconnaissance and planning only. No translation logic, DOM rewriting, g
 
 The first implementation milestone is split into two gates:
 
-1. Establish a browser-compatible, log-only Manifest V3 scaffold and verify it independently in Chrome, Edge, and Firefox.
+1. Establish a browser-compatible, log-only Manifest V3 scaffold and verify it independently in Chrome and Edge.
 2. Use that verified scaffold plus human-controlled inspection to produce evidence about HLTV's rendering model, DOM mutation safety, layout risk, and compliance constraints.
 
 The extension architecture will not be finalized until the P0 questions in the reconnaissance report are answered with evidence. In particular, the report must establish:
@@ -16,6 +16,10 @@ The extension architecture will not be finalized until the P0 questions in the r
 - how to distinguish text that is already Chinese or otherwise does not need translation from text that is eligible for translation.
 
 This plan does not authorize choosing a network-interception architecture or implementing either display mode. The later architecture decision remains with the project owner.
+
+### 1.1 Current browser scope and deferred Firefox support
+
+The currently supported browsers are Chrome and Edge. Firefox is deferred, not abandoned. Its content script was observed to inject, but its background event page did not start during owner validation; the unresolved diagnostic record and first isolation experiment are documented in section 2.8.
 
 ## 2. Reconnaissance method
 
@@ -171,23 +175,19 @@ The only pre-evidence assumptions are operational and are explicitly provisional
 
 I will retrieve the current https://www.hltv.org/robots.txt and the current Terms/usage page reached from an official HLTV link, preserving the exact URLs and access date. docs/compliance.md will quote only the relevant short passages, identify whether automated fetching or redistribution is restricted, and flag uncertainty or access limitations rather than inventing a conclusion.
 
-### 2.8 Firefox log-location verification status
+### 2.8 Deferred Firefox scope and diagnostic record
 
-The requested real Firefox check was attempted before this plan revision:
+Firefox is deferred, not abandoned, and is not part of the current supported-browser Gate 2 pass/fail decision. The owner-run test produced this evidence:
 
-- the available browser-control inventory exposed Edge only and did not expose Firefox;
-- a read-only local installation check found no Firefox executable at C:\Program Files\Mozilla Firefox\firefox.exe, C:\Program Files (x86)\Mozilla Firefox\firefox.exe, or the user's local Mozilla Firefox path, and firefox.exe was not on PATH.
+- Add-on Toolbox showed "WebExtension Fallback Document" and its console was empty.
+- Browser Console also showed no background startup log.
+- The target hltv.org tab did receive `[cs2-hltv-zh] content script injected at https://www.hltv.org/`.
 
-Therefore the actual Firefox UI location could not be tested in this environment. The result is Unable to confirm, not a claim that Firefox has no place to view the log. Gate 2 remains blocked until the owner or a later available Firefox environment performs the test.
+This shows that Firefox accepted the extension and that content-script injection worked. The unresolved failure is specifically that the background event page did not start. It is not recorded as a Firefox success or as a harmless known limitation.
 
-The current Mozilla documentation gives two concrete places to test in that later run:
+One unverified hypothesis is that the presence of the `background.service_worker` key may interfere with Firefox parsing or starting the `background.scripts` event page. Mozilla documentation records a similar issue before Firefox 120, but that does not establish the cause here: https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/manifest.json/background
 
-- Add-on Toolbox: about:debugging → This Firefox → the temporary extension → Inspect → Console. Mozilla documents this as the place for extension background-script logs: https://extensionworkshop.com/documentation/develop/debugging/
-- Browser Console fallback: Ctrl+Shift+J, filtering for the extension ID or the known log prefix. Mozilla documents Browser Console for background logging and also documents web-ext run --bc: https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Modify_a_web_page
-
-Mozilla's manifest documentation also states that Firefox uses background.scripts as an event page and does not support background.service_worker, while the dual scripts/service_worker fallback is intended for cross-browser Manifest V3: https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/manifest.json/background
-
-The Firefox Gate 2 test will therefore try Add-on Toolbox first, then Browser Console. Content-script output will be checked in the target tab's own DevTools Console. If neither Firefox console path displays the background log in the actual browser/version under test, Gate 2 fails and work stops; it is not recorded as a non-blocking known limitation.
+When Firefox support is restored, the first isolation experiment must temporarily remove `background.service_worker`, leave only `background.scripts`, reload the extension, and observe whether the event page starts. If it starts, the dual-key form is the cause; if it does not start, the cause is elsewhere. The Add-on Toolbox and Browser Console remain the diagnostic locations for that future run.
 
 ## 3. Planned modules and dependency direction
 
@@ -235,6 +235,8 @@ The scaffold and later source must also preserve these repository-level constrai
 - Vite builds background.js as one IIFE-compatible file;
 - browser_specific_settings.gecko.id is present;
 - declarativeNetRequest is not used.
+
+The `background.scripts` plus `background.service_worker` dual-key form, `browser_specific_settings.gecko.id`, `webextension-polyfill` with uniform `browser.*` calls, and the single-file IIFE output are intentionally retained while Firefox is deferred. The first three are harmless on Chromium and preserve the entry points for future Firefox restoration; the IIFE output is also required by Chromium. They must not be removed as cleanup, because doing so would discard both the future Firefox entry path and the diagnostic evidence about the current failure.
 
 ### 3.1 How both display modes share one translation layer
 
@@ -361,17 +363,14 @@ Verifiable output: the build completes with its real terminal output recorded; g
 
 ### Gate 2 — Blocking owner-run browser loading checks
 
-This gate is a hard blocker. Chrome, Edge, and Firefox must all pass independently before Gate 3 begins. If any browser fails to load the extension, start the background context, inject the content script, or expose the required log, stop and fix the scaffold, rebuild, and rerun the failed browser. Do not enter Gate 3 with a missing browser log. “Known limitation” is allowed only for a non-blocking difference such as harmless styling or console presentation; it is not allowed for a non-starting scaffold or an unobservable required log.
+This gate is a hard blocker for the current supported scope. Chrome and Edge must both pass independently before Gate 3 begins. If either browser fails to load the extension, start the background context, inject the content script, or expose the required log, stop and fix the scaffold, rebuild, and rerun the failed browser. Do not enter Gate 3 with a missing browser log. A “known limitation” is allowed only for a non-blocking difference such as harmless styling or console presentation; it is not allowed for a non-starting scaffold or an unobservable required log.
 
 Loading instructions will be handed to the owner:
 
 - Chrome/Edge: open the extensions management page, enable Developer mode, choose Load unpacked, select dist/, reload after rebuild, and inspect the extension/background log and an HLTV tab's content log. Edge must be run separately even though its engine is related to Chrome.
-- Firefox: open about:debugging → This Firefox → Load Temporary Add-on…, select the built manifest.json, then open the temporary extension's Inspect entry if present. In the Add-on Toolbox, use Console to verify the background startup log. Also open DevTools for an hltv.org tab and verify the content-script log there.
-- Firefox fallback when the temporary extension card has no Inspect entry or the Add-on Toolbox does not expose the event-page log: open Browser Console with Ctrl+Shift+J, filter by the extension ID or the known log prefix, and trigger the extension event/content-script message that starts the event page. The same fallback can be exercised through web-ext run --bc once web-ext is installed. This fallback is an alternative log location, not permission to skip the background-log check.
+- Firefox is deferred from the current Gate 2 target; its failed background-event-page test and restoration experiment are recorded in section 2.8.
 
-Firefox-specific test status at plan time: it could not be executed in this environment because Firefox was neither exposed by the browser connector nor installed locally. The official locations above are therefore pending actual owner-run verification. If the owner-run Firefox version provides neither Add-on Toolbox nor Browser Console evidence for the background log, Gate 2 fails and the scaffold must be revised or the issue escalated; it is not silently recorded as a known limitation.
-
-Verifiable output: a separate pass/fail report for Chrome, Edge, and Firefox containing browser/version, load method, background-log location, content-log location, and observed log text. All three must pass before reconnaissance.
+Verifiable output: a separate pass/fail report for Chrome and Edge containing browser/version, load method, background-log location, content-log location, and observed log text. Both must pass before reconnaissance.
 
 ### Gate 3 — Evidence-based reconnaissance
 
@@ -405,7 +404,7 @@ Each later milestone must have an independently testable artifact:
 - observer tests proving extension nodes are skipped and framework re-renders can be rebuilt from records;
 - approved element strategy implemented with the one CSS file;
 - timeout/fallback tests proving API failure cannot blank or break the page;
-- separate Chrome, Edge, and Firefox regression passes;
+- separate Chrome and Edge regression passes;
 - packaging check proving only a tagged GitHub Release carries a built ZIP, while dist/ stays untracked.
 
 ## 5. Open questions, ordered by importance

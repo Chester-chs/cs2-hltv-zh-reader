@@ -2,7 +2,7 @@
 
 ## Gate 0.5 — Git initialization and repository hygiene
 
-Status: complete; Gate 1 implementation and build are complete; Gate 2 is pending owner-run browser verification.
+Status: complete; Gate 1 implementation and build are complete; Gate 2 is complete for the current Chrome and Edge scope, with Firefox deferred.
 
 - Git repository initialized with default branch `main`.
 - `.gitignore` created before any staging action.
@@ -29,7 +29,7 @@ Therefore `.env.example` is not ignored.
 
 ## Gate 1 — Minimal scaffold
 
-Status: implementation and build complete; Gate 2 is pending owner-run browser verification.
+Status: implementation and build complete; Gate 2 is complete for the current Chrome and Edge scope; Firefox is deferred, not abandoned.
 
 - Node: `v24.19.0`.
 - Package manager: `pnpm 12.4.1` via `pnpm.cmd`; PowerShell's `pnpm.ps1` shim was blocked by execution policy.
@@ -39,33 +39,35 @@ Status: implementation and build complete; Gate 2 is pending owner-run browser v
 - The bare import/export check returned `rg_exit=1` and `NO_BARE_IMPORT_EXPORT_FOUND`.
 - Manifest paths resolve to existing files: `background.js`, `background.js`, and `content.js`.
 - `git ls-files -- dist` returned no tracked files; `dist/` is ignored by `.gitignore`.
-- Gate 2 is not fully passed. Edge was externally auto-validated, but Chrome and Firefox still require manual loading verification.
+- Gate 2 passed for the current target browsers Chrome and Edge. Firefox is outside the current supported scope and is documented below as an unresolved diagnostic, not as a success.
 
-### Gate 2 partial external pre-validation
+### Gate 2 browser validation
 
 - Edge: automatic validation passed. The service worker was alive and read the manifest internally: worker id `aiginabjibgaalcealemidoceijokeka`, version `0.0.1`, and name `CS2 HLTV Chinese Reader`. On `https://www.hltv.org/`, the content log was `[cs2-hltv-zh] content script injected at https://www.hltv.org/`. The HTTP response was `200`, the title was `Counter-Strike News & Coverage | HLTV.org`, and no Cloudflare challenge page appeared.
-- Chrome: manual validation required. Playwright automation could not load the extension because Chrome rejected `--load-extension` under its official browser security restriction; CDP `Extensions.loadUnpacked` accepted the path but did not activate the extension. This is an automation limitation, not an extension defect.
-- Firefox: manual validation required. The Playwright Firefox build does not support loading unsigned extensions (`backgroundPages=0`). This is an automation limitation, not an extension defect.
+- Chrome: manual validation passed. The background log `[cs2-hltv-zh] background started (version 0.0.1)` was confirmed in the extension service worker DevTools Console, and the content log `[cs2-hltv-zh] content script injected at https://www.hltv.org/` was confirmed in the hltv.org page Console.
 - Additional evidence: Playwright's supported Chromium host passed both background and content validation, and produced the same extension ID as Edge (`aiginabjibgaalcealemidoceijokeka`). This supports that the built artifacts and manifest are healthy.
-- Gate 2 remains incomplete until the Chrome and Firefox manual checks pass. The Edge and Playwright Chromium results do not substitute for those two checks.
+- Gate 2 is passed for the current target browsers Chrome and Edge. Firefox is not a current Gate 2 target.
 
-### Pending manual Gate 2 checks
+### Gate 2 current-scope completion
 
-- Chrome: open `chrome://extensions`, enable Developer mode, choose **Load unpacked**, and select `C:\ChatGPT\HLTV\dist`. Open the extension service worker's **Inspect** console for the background log, then open `https://www.hltv.org/` and use the page DevTools **Console** for the content log. Expected messages are `[cs2-hltv-zh] background started (version 0.0.1)` and `[cs2-hltv-zh] content script injected at https://www.hltv.org/`.
-- Firefox: open `about:debugging#/runtime/this-firefox`, choose **Load Temporary Add-on**, and select `C:\ChatGPT\HLTV\dist\manifest.json`. Use the Add-on Toolbox Console when its **Inspect** entry is available; otherwise use **Browser Console**. In the filtering controls, enable **Info**, **Logs**, **Errors**, and **Warnings**, because `console.log` is Info-level. Use the page DevTools **Console** for the content log. If neither Add-on Toolbox nor Browser Console shows the background log, Gate 2 fails; it is not a known limitation.
-- Firefox test record: Firefox `156.0`, executable `C:\Program Files\Mozilla Firefox\firefox.exe`. The temporary extension must be reloaded after each browser restart.
+- No pending Gate 2 browser checks remain for the current Chrome and Edge scope.
 
-### Gate 2 Firefox notes
+### Deferred Firefox diagnostic
 
-- Test record supplied by the owner: Firefox `156.0`, executable `C:\Program Files\Mozilla Firefox\firefox.exe`.
-- In Browser Console, the filter controls must have Info, Logs, Errors, and Warnings enabled; `console.log` is an Info-level message and must not be hidden by the filter.
-- If the Add-on Toolbox Console has level filters, enable the same Info, Logs, Errors, and Warnings levels there as well.
-- If neither Add-on Toolbox nor Browser Console shows the background log, Gate 2 fails; this is not a known limitation.
+- Firefox is temporarily unsupported and deferred, not abandoned.
+- The owner-run Firefox test showed `WebExtension Fallback Document` in Add-on Toolbox with an empty console, and no background startup log in Browser Console.
+- The content script did inject normally: `[cs2-hltv-zh] content script injected at https://www.hltv.org/`.
+- These observations rule out Firefox rejecting the extension entirely and rule out content-script injection as the failure. The unresolved problem is specifically that the background event page did not start.
+- Unverified hypothesis: the presence of the `background.service_worker` key may interfere with Firefox parsing or starting the `background.scripts` event page. This remains a hypothesis; it is not recorded as the cause.
+- When Firefox support is restored, the first isolation experiment must be:
+
+  > 临时移除 background.service_worker 键，只保留 background.scripts，重新加载，观察事件页是否启动。若启动 → 双键写法是原因；若不启动 → 原因在其他地方。
+
+- Test record: Firefox `156.0`, executable `C:\Program Files\Mozilla Firefox\firefox.exe`. The temporary extension must be reloaded after each browser restart during future diagnosis.
 
 ### Known items deferred from Gate 1
 
-- `manifest.json` currently has no `icons` field. Firefox will display its default extension icon; adding icons is a later TODO and is not part of this scaffold.
-- Firefox temporary extensions do not persist after the browser closes. Each new Firefox test must reload `C:\ChatGPT\HLTV\dist\manifest.json` through `about:debugging`.
+- `manifest.json` currently has no `icons` field. Chrome and Edge will display the default extension icon; adding icons is a later TODO and is not part of this scaffold.
 - `manifest.json` currently uses the user-visible placeholder description `A log-only browser extension scaffold...`. After Gate 3 reconnaissance and confirmation of the feature positioning, rewrite it to describe the real extension functionality.
 
 ### Gate 1 scaffold commit

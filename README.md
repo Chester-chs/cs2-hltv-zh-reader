@@ -12,7 +12,8 @@ An open-source browser extension that provides Chinese reading support for hltv.
 
 - Google Chrome
 - Microsoft Edge
-- Mozilla Firefox
+
+Firefox is temporarily unsupported. Its content script injects, but the Firefox background event page did not start during validation; diagnosis is deferred, not abandoned.
 
 ## Development status
 
