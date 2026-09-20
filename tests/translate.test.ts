@@ -117,7 +117,7 @@ function openAIConfig(
   return {
     baseURL: 'https://provider.invalid/v1',
     model: 'mock-model',
-    apiKey: 'injected-test-key',
+    apiKey: '',
     timeoutMs,
     transport
   };

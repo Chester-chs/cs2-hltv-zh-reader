@@ -294,4 +294,4 @@ createTranslationService(
 
 缓存 key 是原文 hash。服务会先查缓存，只请求增量；相同文本的并发请求通过 in-flight 去重。Provider、校验和缓存失败均回退原文。`CacheStore` 是必填依赖，核心层没有默认内存缓存。
 
-本块尚未接入 background，也没有 IndexedDB 适配器，因此真实扩展集成的缓存命中率为 **0**。内存 CacheStore 只存在于测试代码中；后续由 background 侧提供 IndexedDB 适配器并复用此接口。
+核心层仍然没有默认内存 CacheStore；内存实现只存在于测试代码中。B3a 已在 background 侧提供 IndexedDB 适配器并复用此接口，但真实浏览器中的缓存命中率尚未测量，不能把它报告为已验证的命中率。

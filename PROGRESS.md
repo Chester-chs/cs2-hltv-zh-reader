@@ -140,6 +140,19 @@ Known limits and unverified behavior:
 - The run used Playwright's bundled Chromium, not the project owner's system-installed Chrome or Edge. Loading the extension in those system browsers remains unverified.
 - An attempted automated page reload returned approximately `28 KB` instead of the normal approximately `1.4 MB` response and was classified as Cloudflare anti-bot interception. This is an environment limitation, not an extension failure. Therefore, reapplying translations after a page reload remains unverified.
 
+## Gate 5 B3a — Background integration architecture
+
+Status: implementation complete for owner review; no real provider is connected and no `host_permissions` were added.
+
+- `src/background/protocol.ts` defines validated request/response codecs for `plain` and `event-name` batches. Failure responses carry the original text array and never require the content script to handle an exception.
+- `src/background/cache-store.ts` provides the IndexedDB `CacheStore` adapter. Reads degrade to cache misses and writes are best effort with diagnostics. The core `CacheStore` interface is unchanged.
+- `src/background/settings.ts` reads the full local settings object in background. The API key never enters the content settings reader or the message protocol. `src/shared/settings.ts` is the single source of the `mode: 'A'` default used by both sides.
+- `src/background/fake-provider.ts` is the B3a-only injectable provider and supports success, provider failure, invalid response, and never-resolving test modes. Successful values use the visible `【译】` prefix.
+- `src/content/background-translator.ts` uses an injected message sender and a same-session result map. A same-session hit sends no message; a cross-page IndexedDB hit still sends one message because the cache is background-owned, but background does not call the provider on that hit.
+- The background and content timeout values are injectable. Production defaults are 5000 ms for the background operation and 6000 ms for the content message; tests use short values for deterministic timeout coverage. B3a performs no retries.
+- `docs/background-integration.md` records the protocol, module boundaries, API-key boundary, runtime glossary loading, timeout policy, and the three cache semantics.
+- Automated validation is pending owner review in this working tree; system-browser loading and a real provider remain B3b or later work.
+
 ## Documentation lesson
 
 > PROGRESS.md 曾出现文档漂移：记录了已完成的提交为待批准状态，导致后续会话误判进度。今后每个 Gate 完成时，必须在同一次操作中更新 PROGRESS.md 并核对 git log 的真实输出。

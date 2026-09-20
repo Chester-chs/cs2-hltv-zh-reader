@@ -98,9 +98,9 @@ These constraints come from `docs/display-strategy.md`:
 
 ## 10. Current progress and next steps
 
-- Completed: Gate 0 planning, Gate 0.5 repository setup, Gate 1 scaffold, Gate 2 browser validation for Chrome and Edge, Gate 3 reconnaissance, Gate 4 display strategy, and Gate 5 translation-core and display-layer pure logic.
-- Pending: B2 content-script wiring, B3 background-side IndexedDB and message channel, and B4 options page.
-- The real cache hit rate is currently 0 because there is no background-side IndexedDB adapter yet. Do not fake this by adding a default cache to the core layer.
+- Completed: Gate 0 planning, Gate 0.5 repository setup, Gate 1 scaffold, Gate 2 browser validation for Chrome and Edge, Gate 3 reconnaissance, Gate 4 display strategy, Gate 5 translation-core and display-layer pure logic, and B2 content-script wiring with the document-event bridge.
+- B3a background-side IndexedDB/message architecture is implemented in the working tree and is pending owner review; pending later work is B3b real-provider integration and the B4 options page.
+- The background-side IndexedDB adapter now exists, but the real browser cache hit rate has not been measured. Do not fake a measured hit rate by adding a default cache to the core layer.
 
 ## 11. Documentation map
 
@@ -111,4 +111,5 @@ These constraints come from `docs/display-strategy.md`:
 - `docs/compliance.md` — compliance and licensing.
 - `docs/translation-layer.md` — translation-layer contract.
 - `docs/display-layer.md` — display-layer contract.
+- `docs/background-integration.md` — B3a background integration contract.
 - `docs/testing.md` — testing conventions.
