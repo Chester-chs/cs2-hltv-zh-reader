@@ -1,6 +1,6 @@
 # Gate 3 Findings
 
-Status: reconnaissance outputs recorded for the current Chrome and Edge scope. The page and script evidence is sufficient to classify the three sampled page types as server-rendered HTML with native JavaScript and no observed framework-owned virtual DOM. P0-3 is resolved for `/matches`, while the page-specific CSS checks for news and match-detail containers remain `Unable to confirm`; Gate 4 owner review is still required before implementation.
+Status: reconnaissance outputs recorded for the current Chrome and Edge scope. The page and script evidence is sufficient to classify the three sampled page types as server-rendered HTML with native JavaScript and no observed framework-owned virtual DOM. P0-3 is resolved for `/matches`, while the page-specific CSS checks for news and match-detail containers remain `Unable to confirm`. Gate 4 decisions are recorded below; implementation remains outside this documentation step.
 
 Access date: 2026-09-20. Capture requests used `curl.exe` with a full Chrome-style browser user agent and `Accept-Language: en-US`, sequentially with at least two seconds between requests. No Puppeteer, Playwright, parallel request, or retry loop was used.
 
@@ -68,6 +68,78 @@ The match-detail page contains a `match-page`, team/event sections, a `data-live
 
 The local re-fetch reports 207 `match-teamname`, 1,573 `match-event`, 452 `match-stage`, 457 `match-meta`, 442 `match-time`, 20 `current-map-score`, and 5 `match-team-livescore` elements. The supplied target-class script search reported `match-teamname=0`, `match-event=0`, `match-meta=0`, `match-stage=0`, `match-team=0`, `match-wrapper=2`, `current-map-score=3`, and `match-time=1` in script bodies. Team/event/stage/meta output is static in the inspected scripts; current time and score fields are dynamic targets. The supplied ten-script scan covered 1,236,708 bytes and found `children[0]=0`, `firstElementChild=0`, `lastElementChild=0`, `childNodes[=1`, `.children[=1`, and `nth-child=2`; the one `childNodes[0]` hit belonged to htmx fragment handling, the one `.children[` hit belonged to gtag traversal, and neither targeted match containers.
 
+## 3A. Targeted comment-area reconnaissance
+
+Evidence basis for this subsection: the owner-supplied Gate 4 capture of `https://www.hltv.org/matches/2398108/aurora-vs-vitality-starladder-starseries-fall-2026` (HTTP 200, 717,697 bytes) and the primary stylesheet `https://resources.hltv.org/hltv-everything.css/fdddc7f98fef6cb157c3efd609bb3360.css` (2,524,977 bytes). These facts were adopted directly for Gate 4; no additional request was made. The earlier local Gate 3 match-detail capture is not used for the comment counts below.
+
+### Comment rendering and DOM structure
+
+1. Comments are server-rendered. The initial HTML contains 195 `class="post"` elements, and all sampled comment bodies are present in that response. The earlier suggestion that comments might be client-loaded was incorrect: the keyword search failed because the comment block classes do not contain the word `comment`. The outer `class="match-comments"` container occurs once.
+2. The relevant structure is:
+
+```html
+<div class="match-comments" data-original-overlay-location="...">
+  <div class="forum no-promode" data-forum-thread-id="3180197">
+    <div class="post" id="r69926602">
+      <div class="standard-box">
+        <div class="forum-topbar" data-topbar-post="r69926602">
+          <a class="replyNum">#1</a>
+          <div class="fan-con">...</div>
+          <img class="flag" title="Russia"><a class="authorAnchor">H3LG3</a>
+        </div>
+        <div class="forum-middle">Congratulations mouz</div>
+        <div class="forum-bottombar">...</div>
+      </div>
+      <div class="children">
+        <div class="threading" data-threading-reply-parent="r69926602">
+          <div class="post" id="r69927038">...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+```
+
+The comment body is `.forum-middle`. Nested replies are under `.children > .threading`. The supplied count is 195 `post` elements, 122 `children` elements, and 73 `threading` elements.
+
+### Comment layout, position, and rendering behavior
+
+3. The comment body is structurally suitable for Mode B. The stylesheet has:
+
+```css
+.forum .forum-middle,.fragments-overlay .forum-middle{font-size:13px;white-space:pre-line}
+.forum .forum-middle,.fragments-overlay .forum-middle{overflow-x:auto;padding:6px 9px}
+```
+
+No fixed width, fixed height, or `overflow:hidden` was found for the comment body. This is materially looser than the fixed-dimension `match-stage` and `match-meta` containers.
+4. Position-selector risk was not found at the comment targets. `.children` has only `.threading` as its child, so `.threading:last-child` is invariant. The targeted `:nth-child` and `:first-child` scans for `post`, `children`, `threading`, and `forum-middle` were all zero. Appending a sibling inside `.forum-middle` does not change `.threading`'s index inside `.children`.
+5. HLTV uses content-visibility as a performance optimization:
+
+```css
+.forum .post,.fragments-overlay .post{margin-bottom:10px}
+.forum .post{contain-intrinsic-size:auto 100px;content-visibility:auto;
+              margin:-3px -3px 7px;padding:3px}
+```
+
+`content-visibility:auto` can skip rendering for off-screen comments while keeping them in the DOM; an inserted translation should become visible when the comment is scrolled into view. The inserted node may change the intrinsic-size estimate and cause a small scroll-position jump. The magnitude of that jump is `Unable to confirm` until an actual rendered check.
+
+### Dynamic comment fields and language evidence
+
+6. Comment timestamps are dynamic and prohibited from translation. The time nodes use `data-time-format` and `data-unix`, and `hltv-csstheme.js` contains the confirmed rewrite:
+
+```js
+document.querySelectorAll(`[data-time-format][data-unix]`).forEach(t=>{
+  t.textContent = formatJavaPattern(
+    parseInt(t.dataset.unix,10), t.dataset.timeFormat, e
+  )
+})
+```
+
+The extension must not translate or append to these comment-time nodes because the timezone rewrite can replace their text.
+7. The sampled comment language is highly mixed: `Congratulations mouz`, `Thank you <3`, `bot [emoji]`, `lol 4`, `aurora will 2-0 mouz in semis #jimisrevenge #jimfapisback`, `ez for aurora 3-1, we are looking so good right now mashallah`, `Ez 4 GOON BOSS CEM FUAT`, and `1v9?? gl`. Short text, slang, abbreviations, emoji, hashtags, and mixed English/Russian/Portuguese make language classification high-risk.
+
+Conclusion: comments are SSR content, and Mode B is approved only for a whole `.forum-middle` body that is confidently classified as English. Other languages, low-confidence classifications, failed classifications, and comments containing Chinese characters remain unchanged. Comment translation never uses the event-name partial-translation path. The CSS conclusion is limited to this comment area; it is not evidence about news `newsline` or match-detail `.match-page`/score containers.
+
 ## 4. P0-1: page-type consistency
 
 Result: confirmed for the three sampled page types plus the supplied match-list evidence, with the following boundary:
@@ -124,7 +196,7 @@ The real constraint found in the same stylesheet is dimension-related:
 - `match-stage` is dimension-constrained: `.matches-v4 .match-stage` has height and line-height 14px, with fixed widths of 62px, 51px, 45px, and 65px for the grand-final, semifinal, other-playoff, and quarterfinal variants. Extra sibling content can be clipped or overflow, so it is Mode A only.
 - `match-meta` is dimension-constrained: the base rule fixes width at 28px and the narrow-media rule fixes it at 22px. Extra sibling content can be clipped or overflow, so it is Mode A only.
 
-Conclusion: the /matches scan found no target-parent position dependency; the primary Mode B risk is fixed width/height clipping or overflow on `match-stage` and `match-meta`, not positional misalignment. The element-level boundary is therefore: `match-teamname`, `match-event`, and `match-time` are bilingual-feasible candidates; `match-stage` and `match-meta` are Mode A only.
+Conclusion: the /matches scan found no target-parent position dependency; the primary Mode B risk is fixed width/height clipping or overflow on `match-stage` and `match-meta`, not positional misalignment. Structurally, `match-teamname`, `match-event`, and `match-time` have no target fixed-width rule found in this scan; Gate 4 nevertheless excludes `match-teamname` from translation by owner decision. `match-event` and `match-time` remain bilingual-feasible candidates, while `match-stage` and `match-meta` are Mode A only.
 
 Evidence boundary: these CSS conclusions cover `/matches` only. Parent-level CSS for match-detail `.match-page`/score areas and for news `newsline`/`newstext` was not checked in this pass and remains `Unable to confirm`. No `/matches` conclusion is transferred to those containers. The absence of positional selectors in the previously captured news and match-detail sources is not a substitute for that page-specific parent-CSS check.
 
@@ -146,4 +218,4 @@ The captured sitemap index listed `https://www.hltv.org/news-sitemap.xml`. That 
 - Gate 3B/P0-3: resolved for `/matches`. The local CSS scan found no target-parent positional selector; the observed `:nth-child` rules are on `.match-time-wrapper`, while fixed dimensions constrain `match-stage` and `match-meta`.
 - P0-3 remains page-scoped: match-detail `.match-page`/score CSS and news `newsline`/`newstext` parent CSS are `Unable to confirm` because they were not checked.
 
-The `/matches` P0-3 evidence gap is closed, but Gate 4 owner review remains required for the element-level boundary and for the uninspected page-specific containers. No display implementation, translation API, DOM insertion, or network interception is authorized by these findings before that review.
+The `/matches` P0-3 evidence gap is closed and Gate 4 decisions are recorded in `docs/display-strategy.md`. The uninspected page-specific CSS boundaries remain explicit and no display implementation, translation API, DOM insertion, or network interception is authorized by these findings in this documentation step.

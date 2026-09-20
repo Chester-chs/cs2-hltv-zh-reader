@@ -76,7 +76,7 @@ Status: implementation and build complete; Gate 2 is complete for the current Ch
 
 ## Gate 3 — Evidence-based reconnaissance
 
-Status: Gate 3 documentation outputs updated for the current Chrome and Edge scope. P0-3 is resolved for `/matches`; page-specific CSS for news and match-detail containers remains `Unable to confirm`, and Gate 4 owner review is still pending.
+Status: Gate 3 documentation outputs updated for the current Chrome and Edge scope. P0-3 is resolved for `/matches`; page-specific CSS for news and match-detail containers remains `Unable to confirm`, and Gate 4 owner decisions are recorded below.
 
 - Gate 3A: the current news archive, one news article, and one match-detail page were captured once each with curl and at least two-second request spacing. Under the explicit P0-3 re-fetch authorization, `/matches` and its primary stylesheet were then captured sequentially with the same curl discipline.
 - News-list URL resolution: `https://www.hltv.org/news` was known to return 404; the current list URL was resolved from home navigation and the sitemap trail as `https://www.hltv.org/news/archive/2026/september`.
@@ -84,10 +84,24 @@ Status: Gate 3 documentation outputs updated for the current Chrome and Edge sco
 - P0-2: the preloaded livescore modules establish Socket.IO score delivery from `https://scorebot-lb.hltv.org`; `score` events update `data-livescore-*` nodes. Runtime handshake/reconnect timing was not measured.
 - P0-3: the local 2026-09-20 re-fetch returned HTTP 200 and produced 1,247,718 bytes for `https://www.hltv.org/matches` and 2,524,977 bytes for `https://resources.hltv.org/hltv-everything.css/fdddc7f98fef6cb157c3efd609bb3360.css`. The local evidence is in `raw-capture/gate3/matches.html` and `raw-capture/gate3/matches-style.css`. The handoff sizes were 1,243,948 and 2,524,946 bytes; the difference is recorded, but its cause is not established.
 - The target-parent scan found no `:nth-child`, `:first-child`, or `:last-child` selector for `.match-team`, `.match-teams`, `.match-teamname`, or `.match-info`. The observed positional selectors are on `.match-time-wrapper`, not the `.match-teamname` parent, so position-shift risk was not found in this `/matches` scan.
-- The real `/matches` constraint is dimension-related: `match-teamname`, `match-event`, and `match-time` have no fixed target width rule found in the stylesheet and are bilingual-feasible candidates; `match-stage` and `match-meta` have fixed dimensions and are Mode A only because inserted content may clip or overflow.
+- The real `/matches` constraint is dimension-related: `match-event` and `match-time` have no fixed target width rule found in the stylesheet and are bilingual-feasible candidates; `match-teamname` is structurally unconstrained but is excluded from translation by the Gate 4 owner decision; `match-stage` and `match-meta` have fixed dimensions and are Mode A only because inserted content may clip or overflow.
 - CSS for match-detail `.match-page`/score areas and news `newsline`/`newstext` parent containers was not checked and remains `Unable to confirm`. No `/matches` CSS conclusion is applied to those routes.
 - Created `docs/findings.md`, `docs/display-strategy.md`, and `docs/compliance.md`. Raw captures remain ignored and local-only.
-- Next allowed action: Gate 4 owner review of the element-level boundary and the uninspected page-specific containers. No display implementation begins before that review is complete.
+- Gate 4 owner review and decisions are now recorded below. No display implementation begins in this documentation step.
+
+## Gate 4 — Owner-confirmed display strategy
+
+Status: complete for the owner decision; implementation remains a later Gate 5 activity.
+
+- Team names are never translated. `Aurora` remains `Aurora`; the strategy is Mode A no-op and excludes team names from Mode B.
+- Event/tournament names use partial translation. Brand fragments are protected by `glossary.json` entries with `keep_as_is`. The prompt must list each protected fragment, the result must preserve every protected fragment byte-for-byte, and validation failure discards the result and falls back to the original. Reordering such as `Fall 2026` → `2026 秋季赛` requires structural validation. On `/matches`, `match-event` is approved for this strategy in Mode B; other page-specific containers remain separately bounded.
+- The translation backend is an interchangeable LLM provider interface using the OpenAI-compatible `/chat/completions` protocol. DeepSeek, OpenAI, and local models are selected by `baseURL` and model name only. No provider is locked at Gate 4, and DeepL is not used.
+- News titles and article bodies are approved for Mode B. Their news `newsline`/`newstext` and article parent CSS was not checked and remains `Unable to confirm`; the `/matches` and comment CSS findings are not generalized to them.
+- Comments are approved for Mode B only when the entire `.forum-middle` body is confidently classified as English. Other languages, low-confidence or failed classifications, and comments containing Chinese characters remain unchanged. Comments are translated as a whole and never use event-name partial translation. Failed or uncertain classifications must be recordable for later review.
+- Comment evidence: the owner-supplied match-detail response was HTTP 200 and 717,697 bytes; the primary stylesheet was 2,524,977 bytes. The response contained 195 SSR `post` elements, with 122 `children` and 73 `threading` elements. `.forum-middle` has no fixed width/height or `overflow:hidden`, while `content-visibility:auto` can cause a small scroll-position change that requires later rendered observation.
+- Comment timestamps are prohibited from translation because `hltv-csstheme.js` rewrites `[data-time-format][data-unix]` text. Countdown and `data-livescore-*` dynamic values remain prohibited as already recorded.
+- P0-LANG uses the conservative rule: when language confidence is low, keep the entire original text. The same rule is mandatory for comments; comments do not use mixed-segment or partial translation.
+- Unchecked boundaries remain explicit: news-list parent CSS and match-detail `.match-page`/score-area CSS are `Unable to confirm`. No `/matches` or comment-area CSS result is applied to those containers.
 
 ## Documentation lesson
 
