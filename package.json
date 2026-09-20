@@ -6,6 +6,7 @@
   "main": "index.js",
   "scripts": {
     "build": "vite build --mode background && vite build --mode content",
+    "test": "node --test tests/*.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "keywords": [],

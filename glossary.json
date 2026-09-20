@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "term": "StarLadder StarSeries",
+      "target": "StarLadder StarSeries",
+      "keep_as_is": true,
+      "category": "event",
+      "note": "品牌名，保留英文"
+    },
+    {
+      "term": "Grand Final",
+      "target": "总决赛",
+      "keep_as_is": false,
+      "category": "stage"
+    }
+  ]
+}

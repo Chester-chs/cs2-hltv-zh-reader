@@ -4,15 +4,17 @@ import { defineConfig, type Plugin } from 'vite';
 
 type BuildTarget = 'background' | 'content';
 
-function copyRootManifest(): Plugin {
+function copyRootAssets(): Plugin {
   return {
-    name: 'copy-root-manifest',
+    name: 'copy-root-assets',
     generateBundle() {
-      this.emitFile({
-        type: 'asset',
-        fileName: 'manifest.json',
-        source: readFileSync(resolve(process.cwd(), 'manifest.json'), 'utf8')
-      });
+      for (const fileName of ['manifest.json', 'glossary.json']) {
+        this.emitFile({
+          type: 'asset',
+          fileName,
+          source: readFileSync(resolve(process.cwd(), fileName), 'utf8')
+        });
+      }
     }
   };
 }
@@ -25,7 +27,7 @@ export default defineConfig(({ mode }) => {
   const target: BuildTarget = mode;
 
   return {
-    plugins: [copyRootManifest()],
+    plugins: [copyRootAssets()],
     build: {
       emptyOutDir: target === 'background',
       sourcemap: false,
