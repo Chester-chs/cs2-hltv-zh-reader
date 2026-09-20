@@ -1,7 +1,3 @@
-// TypeScript 7.0.2 reports TS5097 for explicit .ts imports without the
-// allowImportingTsExtensions flag; keep the required import spelling and
-// document this narrow compiler discrepancy instead of changing the config.
-// @ts-expect-error TS5097
 import { add } from './fixtures/add.ts';
 
 const nodeTestModuleName: string = 'node:test';

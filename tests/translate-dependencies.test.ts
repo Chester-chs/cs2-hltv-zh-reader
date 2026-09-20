@@ -14,15 +14,15 @@ const { strict: assert } = (await import(nodeAssertModuleName)) as {
 };
 
 const nodeFsModuleName = 'node:fs';
-const { readdirSync, readFileSync, statSync } = (await import(
+const { existsSync, readdirSync, readFileSync } = (await import(
   nodeFsModuleName
 )) as {
+  existsSync(path: string): boolean;
   readdirSync(
     path: string,
     options: { withFileTypes: true }
   ): DirectoryEntry[];
   readFileSync(path: string, encoding: 'utf8'): string;
-  statSync(path: string): { isDirectory(): boolean };
 };
 
 const nodePathModuleName = 'node:path';
@@ -64,18 +64,23 @@ function collectTypeScriptFiles(directory: string): string[] {
 
 test('translation layer has no browser or DOM dependencies', () => {
   const testDirectory = dirname(fileURLToPath(import.meta.url));
-  const sourceDirectory = resolve(testDirectory, '../src/core/translate');
+  const sourceDirectories = [
+    resolve(testDirectory, '../src/core/translate'),
+    resolve(testDirectory, '../src/core/display')
+  ];
 
-  assert.equal(statSync(sourceDirectory).isDirectory(), true);
+  for (const sourceDirectory of sourceDirectories) {
+    assert.equal(existsSync(sourceDirectory), true, sourceDirectory);
 
-  for (const filePath of collectTypeScriptFiles(sourceDirectory)) {
-    const source = readFileSync(filePath, 'utf8');
-    for (const [name, pattern] of forbiddenReferences) {
-      assert.equal(
-        pattern.test(source),
-        false,
-        `${filePath} contains forbidden reference: ${name}`
-      );
+    for (const filePath of collectTypeScriptFiles(sourceDirectory)) {
+      const source = readFileSync(filePath, 'utf8');
+      for (const [name, pattern] of forbiddenReferences) {
+        assert.equal(
+          pattern.test(source),
+          false,
+          `${filePath} contains forbidden reference: ${name}`
+        );
+      }
     }
   }
 });

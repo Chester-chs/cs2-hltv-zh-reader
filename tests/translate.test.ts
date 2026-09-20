@@ -14,7 +14,6 @@ const { test } = (await import(nodeTestModuleName)) as {
   test(name: string, callback: () => void | Promise<void>): void;
 };
 
-// @ts-expect-error TS5097
 import { classifyText, createOpenAICompatibleProvider, createTranslationService, findKeepAsIsMatches, hashText, isEntirelyKeepAsIs, lookupEntries, parseGlossaryJson, validateTranslation, type CacheStore, type ChatCompletionsTransport, type ChatCompletionsTransportRequest, type GlossaryDocument, type ProviderRequest, type ProviderResult, type TranslationProvider } from '../src/core/translate/index.ts';
 
 const glossary: GlossaryDocument = {
