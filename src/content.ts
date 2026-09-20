@@ -1,4 +1,5 @@
 import browser from 'webextension-polyfill';
+import { installDebugEventBridge } from './content/debug-bridge.ts';
 import { createContentRuntime } from './content/runtime.ts';
 import { createStubTranslationService } from './content/stub-translator.ts';
 
@@ -16,17 +17,7 @@ const runtime = createContentRuntime({
   }
 });
 
-// Temporary B2 debug entry point. B4 will replace this with the options/runtime wiring.
-(window as Window & {
-  __hltvZh?: {
-    setEnabled(enabled: boolean): Promise<void>;
-    setMode(mode: 'A' | 'B'): Promise<void>;
-    stats(): ReturnType<typeof runtime.stats>;
-  };
-}).__hltvZh = {
-  setEnabled: (enabled) => runtime.setEnabled(enabled),
-  setMode: (mode) => runtime.setMode(mode),
-  stats: () => runtime.stats()
-};
+// Temporary B2 debug entry point via document events. B4 will replace it with real settings UI wiring.
+installDebugEventBridge(document, runtime);
 
 void runtime.start();
