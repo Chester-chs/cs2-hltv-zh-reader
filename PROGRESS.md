@@ -2,7 +2,7 @@
 
 ## Gate 0.5 — Git initialization and repository hygiene
 
-Status: complete; Gate 1 has not started.
+Status: complete; Gate 1 implementation and build are complete; Gate 2 is pending owner-run browser verification.
 
 - Git repository initialized with default branch `main`.
 - `.gitignore` created before any staging action.
@@ -11,7 +11,8 @@ Status: complete; Gate 1 has not started.
 - Created `LICENSE`, `README.md`, `NOTICE.md`, and placeholder-only `.env.example`.
 - Pre-commit scan found no high-confidence secret pattern, raw capture, or anomalously large whitelist file.
 - `PLAN.md` is intentionally not ignored; it is excluded from the first commit by the explicit staging whitelist and remains eligible for a later documentation commit.
-- First commit created as `f181a34d4d0e2a5341bd3998f31fdb5eba10bc28` with message `chore: initialize repository hygiene`.
+- First commit created as `ddcc188` with message `chore: initialize repository hygiene`.
+- The first-commit hash changed from `f181a34d4d0e2a5341bd3998f31fdb5eba10bc28` to `ddcc188` because the commit author identity was corrected.
 - `git show --stat HEAD` confirmed that the commit contains exactly four files: `.gitignore`, `LICENSE`, `NOTICE.md`, and `README.md`.
 - Second commit created as `862d88faa345fc7d054ef1b88cca92717d547cf4` with message `docs: add project plan and progress log`.
 - The second commit contains `.env.example`, `PLAN.md`, and `PROGRESS.md`; the post-commit status was clean.
@@ -67,25 +68,10 @@ Status: implementation and build complete; Gate 2 is pending owner-run browser v
 - Firefox temporary extensions do not persist after the browser closes. Each new Firefox test must reload `C:\ChatGPT\HLTV\dist\manifest.json` through `about:debugging`.
 - `manifest.json` currently uses the user-visible placeholder description `A log-only browser extension scaffold...`. After Gate 3 reconnaissance and confirmation of the feature positioning, rewrite it to describe the real extension functionality.
 
-### Pending scaffold commit
+### Gate 1 scaffold commit
 
-The following files are awaiting owner approval for an explicit `chore:` commit:
+- Completed as `529ae86` with message `chore: add minimal extension scaffold`.
 
-```text
-package.json
-pnpm-lock.yaml
-tsconfig.json
-manifest.json
-vite.config.ts
-src/background.ts
-src/content.ts
-```
+## Documentation lesson
 
-### First-commit whitelist awaiting confirmation
-
-```text
-.gitignore
-LICENSE
-README.md
-NOTICE.md
-```
+> PROGRESS.md 曾出现文档漂移：记录了已完成的提交为待批准状态，导致后续会话误判进度。今后每个 Gate 完成时，必须在同一次操作中更新 PROGRESS.md 并核对 git log 的真实输出。
