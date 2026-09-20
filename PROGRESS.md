@@ -105,14 +105,40 @@ Status: complete for the owner decision; implementation remains a later Gate 5 a
 
 ## Gate 5 housekeeping — documentation and configuration debt
 
-Status: complete for these four debts; no translation-layer or page-integration implementation was started.
+Status: complete for these four debts; B2 page integration and the document-event debug bridge are recorded below.
 
 - News/article CSS reconnaissance was added to `docs/findings.md`. The archive capture was 355,372 bytes, the article capture was 320,875 bytes, and the shared stylesheet was 2,524,977 bytes. The `.index .newstext` and `.newsdsl .newstext-con`/`.news-block` containers are Mode B-feasible; `.newstc` is not an insertion target because of `min-width:80px`. The match-detail `.match-page`/score-area CSS remains `Unable to confirm`.
 - The global prohibition on elements carrying both `data-time-format` and `data-unix` is recorded with evidence from match-list, comment, article, and match-detail time fields.
 - `tsconfig.json` includes `tests/**/*.ts`. The deliberate test-file error produced TS2322 with typecheck exit 1; after removal, `pnpm.cmd typecheck` returned exit 0.
-- `package.json` uses the native Node test runner with `node --test tests/*.test.ts`. Node v24.19.0 type stripping is used; no ts-node, tsx, or test runtime dependency was added. Test imports use explicit `.ts` extensions; existing `src/` imports retain their previous spelling. TypeScript 7.0.2 still reports TS5097 for that spelling without the compiler flag, so the demonstration test documents the narrow expected diagnostic with `@ts-expect-error` rather than changing the project compiler option.
+- `package.json` uses the native Node test runner with `node --test tests/*.test.ts`. Node v24.19.0 type stripping is used; no ts-node, tsx, or test runtime dependency was added. Test imports use explicit `.ts` extensions; existing `src/` imports retain their previous spelling. `tsconfig.json` enables `allowImportingTsExtensions` with `noEmit: true`, so the imports are type-checked directly and no TS5097 suppression is used.
 - Root `glossary.json` now follows the versioned `term`/`target`/`keep_as_is`/`category` schema. The documented loader contract rejects and reports entries where `keep_as_is` is true but `target` differs from `term`.
 - Vite copies the root glossary asset into `dist/glossary.json`. Runtime code must read the packaged extension copy, not the repository path.
+
+## Gate 5 B2 — Content-script integration browser validation
+
+Status: implementation and owner-provided automated browser validation complete. The validation used Playwright's bundled Chromium against the real `https://www.hltv.org/matches` page; it was not a system-installed Chrome or Edge run.
+
+Implementation notes: the content script changes only target text-node `data`; it never assigns `textContent` or `innerHTML` on container elements. Observer writes use `disconnect -> write -> takeRecords -> observe` inside `try/finally` to prevent self-triggered loops. Nested candidate ownership stops at the innermost matching element. B2 uses a `【译】`-prefixed stub translator; B3b will replace it with the real provider.
+
+The owner-provided automated run passed all ten checks:
+
+1. Host response was `status=200`, and the extension service worker was present.
+2. The document-event stats response was `{processedNodes: 1720, skippedNodes: 1268, mode: "B", enabled: true}`.
+3. Mode B inserted `452` translation nodes with `forbiddenParents=0`. Sample parent classes were `text-ellipsis` and `match-event`; no inserted node had a parent class containing `match-stage`, `match-meta`, `match-time`, `current-map-score`, or `match-teamname`.
+4. All `452` inserted nodes carried both `data-hltv-zh="1"` and `translate="no"`.
+5. Among `40` checked `.match-stage` elements, `0` contained a translation node.
+6. Never-translate checks passed: `.match-teamname` `225/0`, `.match-time` `456/0`, `.current-map-score` `4/0`, and `.match-team-livescore` `2/0`, where each value is total/mutated.
+7. Layout checks passed: `overflow=0`, `docScroll=docClient=1425`, and `.match-team` remained `21px` high.
+8. The observer was stable for five seconds in Mode B: translation markers remained `452 -> 452` with no loop.
+9. Switching back to Mode A left `markers=0`.
+10. Disabling left `markers=0`, no `【译】` text, and restored `.match-stage` text `Playoffs`.
+
+Additional integrity checks passed: `1641` links remained intact, including `452` `a.match-top` links.
+
+Known limits and unverified behavior:
+
+- The run used Playwright's bundled Chromium, not the project owner's system-installed Chrome or Edge. Loading the extension in those system browsers remains unverified.
+- An attempted automated page reload returned approximately `28 KB` instead of the normal approximately `1.4 MB` response and was classified as Cloudflare anti-bot interception. This is an environment limitation, not an extension failure. Therefore, reapplying translations after a page reload remains unverified.
 
 ## Documentation lesson
 
