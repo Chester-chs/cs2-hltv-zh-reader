@@ -13,6 +13,30 @@
       "target": "总决赛",
       "keep_as_is": false,
       "category": "stage"
+    },
+    {
+      "term": "Fall",
+      "target": "秋季",
+      "keep_as_is": false,
+      "category": "season"
+    },
+    {
+      "term": "Summer",
+      "target": "夏季",
+      "keep_as_is": false,
+      "category": "season"
+    },
+    {
+      "term": "Spring",
+      "target": "春季",
+      "keep_as_is": false,
+      "category": "season"
+    },
+    {
+      "term": "Winter",
+      "target": "冬季",
+      "keep_as_is": false,
+      "category": "season"
     }
   ]
 }
