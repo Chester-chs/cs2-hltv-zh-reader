@@ -76,7 +76,7 @@ Status: implementation and build complete; Gate 2 is complete for the current Ch
 
 ## Gate 3 — Evidence-based reconnaissance
 
-Status: Gate 3 documentation outputs updated for the current Chrome and Edge scope. P0-3 is resolved for `/matches`; page-specific CSS for news and match-detail containers remains `Unable to confirm`, and Gate 4 owner decisions are recorded below.
+Status: Gate 3 documentation outputs updated for the current Chrome and Edge scope. P0-3 is resolved for `/matches` and the documented news/article structures; the match-detail `.match-page`/score-area CSS remains `Unable to confirm`, and Gate 4 owner decisions are recorded below.
 
 - Gate 3A: the current news archive, one news article, and one match-detail page were captured once each with curl and at least two-second request spacing. Under the explicit P0-3 re-fetch authorization, `/matches` and its primary stylesheet were then captured sequentially with the same curl discipline.
 - News-list URL resolution: `https://www.hltv.org/news` was known to return 404; the current list URL was resolved from home navigation and the sitemap trail as `https://www.hltv.org/news/archive/2026/september`.
@@ -85,7 +85,7 @@ Status: Gate 3 documentation outputs updated for the current Chrome and Edge sco
 - P0-3: the local 2026-09-20 re-fetch returned HTTP 200 and produced 1,247,718 bytes for `https://www.hltv.org/matches` and 2,524,977 bytes for `https://resources.hltv.org/hltv-everything.css/fdddc7f98fef6cb157c3efd609bb3360.css`. The local evidence is in `raw-capture/gate3/matches.html` and `raw-capture/gate3/matches-style.css`. The handoff sizes were 1,243,948 and 2,524,946 bytes; the difference is recorded, but its cause is not established.
 - The target-parent scan found no `:nth-child`, `:first-child`, or `:last-child` selector for `.match-team`, `.match-teams`, `.match-teamname`, or `.match-info`. The observed positional selectors are on `.match-time-wrapper`, not the `.match-teamname` parent, so position-shift risk was not found in this `/matches` scan.
 - The real `/matches` constraint is dimension-related: `match-event` and `match-time` have no fixed target width rule found in the stylesheet and are bilingual-feasible candidates; `match-teamname` is structurally unconstrained but is excluded from translation by the Gate 4 owner decision; `match-stage` and `match-meta` have fixed dimensions and are Mode A only because inserted content may clip or overflow.
-- CSS for match-detail `.match-page`/score areas and news `newsline`/`newstext` parent containers was not checked and remains `Unable to confirm`. No `/matches` CSS conclusion is applied to those routes.
+- CSS for the match-detail `.match-page`/score area was not checked and remains `Unable to confirm`. News/article CSS is resolved for the documented archive `.index` structure and article `.newsdsl .newstext-con`/`.news-block` structure; no `/matches` or news conclusion is applied to the uninspected match-detail score area.
 - Created `docs/findings.md`, `docs/display-strategy.md`, and `docs/compliance.md`. Raw captures remain ignored and local-only.
 - Gate 4 owner review and decisions are now recorded below. No display implementation begins in this documentation step.
 
@@ -96,12 +96,23 @@ Status: complete for the owner decision; implementation remains a later Gate 5 a
 - Team names are never translated. `Aurora` remains `Aurora`; the strategy is Mode A no-op and excludes team names from Mode B.
 - Event/tournament names use partial translation. Brand fragments are protected by `glossary.json` entries with `keep_as_is`. The prompt must list each protected fragment, the result must preserve every protected fragment byte-for-byte, and validation failure discards the result and falls back to the original. Reordering such as `Fall 2026` → `2026 秋季赛` requires structural validation. On `/matches`, `match-event` is approved for this strategy in Mode B; other page-specific containers remain separately bounded.
 - The translation backend is an interchangeable LLM provider interface using the OpenAI-compatible `/chat/completions` protocol. DeepSeek, OpenAI, and local models are selected by `baseURL` and model name only. No provider is locked at Gate 4, and DeepL is not used.
-- News titles and article bodies are approved for Mode B. Their news `newsline`/`newstext` and article parent CSS was not checked and remains `Unable to confirm`; the `/matches` and comment CSS findings are not generalized to them.
+- News titles and article bodies are approved for Mode B. The archive `.index .newstext` flex evidence and article `.newsdsl .newstext-con`/`.news-block` evidence support that decision; the match-detail `.match-page`/score-area CSS remains `Unable to confirm`.
 - Comments are approved for Mode B only when the entire `.forum-middle` body is confidently classified as English. Other languages, low-confidence or failed classifications, and comments containing Chinese characters remain unchanged. Comments are translated as a whole and never use event-name partial translation. Failed or uncertain classifications must be recordable for later review.
 - Comment evidence: the owner-supplied match-detail response was HTTP 200 and 717,697 bytes; the primary stylesheet was 2,524,977 bytes. The response contained 195 SSR `post` elements, with 122 `children` and 73 `threading` elements. `.forum-middle` has no fixed width/height or `overflow:hidden`, while `content-visibility:auto` can cause a small scroll-position change that requires later rendered observation.
 - Comment timestamps are prohibited from translation because `hltv-csstheme.js` rewrites `[data-time-format][data-unix]` text. Countdown and `data-livescore-*` dynamic values remain prohibited as already recorded.
 - P0-LANG uses the conservative rule: when language confidence is low, keep the entire original text. The same rule is mandatory for comments; comments do not use mixed-segment or partial translation.
-- Unchecked boundaries remain explicit: news-list parent CSS and match-detail `.match-page`/score-area CSS are `Unable to confirm`. No `/matches` or comment-area CSS result is applied to those containers.
+- Unchecked boundaries remain explicit: match-detail `.match-page`/score-area CSS is `Unable to confirm`. No `/matches`, news, or comment-area CSS result is applied to that uninspected container.
+
+## Gate 5 housekeeping — documentation and configuration debt
+
+Status: complete for these four debts; no translation-layer or page-integration implementation was started.
+
+- News/article CSS reconnaissance was added to `docs/findings.md`. The archive capture was 355,372 bytes, the article capture was 320,875 bytes, and the shared stylesheet was 2,524,977 bytes. The `.index .newstext` and `.newsdsl .newstext-con`/`.news-block` containers are Mode B-feasible; `.newstc` is not an insertion target because of `min-width:80px`. The match-detail `.match-page`/score-area CSS remains `Unable to confirm`.
+- The global prohibition on elements carrying both `data-time-format` and `data-unix` is recorded with evidence from match-list, comment, article, and match-detail time fields.
+- `tsconfig.json` includes `tests/**/*.ts`. The deliberate test-file error produced TS2322 with typecheck exit 1; after removal, `pnpm.cmd typecheck` returned exit 0.
+- `package.json` uses the native Node test runner with `node --test tests/*.test.ts`. Node v24.19.0 type stripping is used; no ts-node, tsx, or test runtime dependency was added. Test imports use explicit `.ts` extensions; existing `src/` imports retain their previous spelling. TypeScript 7.0.2 still reports TS5097 for that spelling without the compiler flag, so the demonstration test documents the narrow expected diagnostic with `@ts-expect-error` rather than changing the project compiler option.
+- Root `glossary.json` now follows the versioned `term`/`target`/`keep_as_is`/`category` schema. The documented loader contract rejects and reports entries where `keep_as_is` is true but `target` differs from `term`.
+- Vite copies the root glossary asset into `dist/glossary.json`. Runtime code must read the packaged extension copy, not the repository path.
 
 ## Documentation lesson
 

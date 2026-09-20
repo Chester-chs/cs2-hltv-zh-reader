@@ -1,6 +1,6 @@
 # Gate 3 Findings
 
-Status: reconnaissance outputs recorded for the current Chrome and Edge scope. The page and script evidence is sufficient to classify the three sampled page types as server-rendered HTML with native JavaScript and no observed framework-owned virtual DOM. P0-3 is resolved for `/matches`, while the page-specific CSS checks for news and match-detail containers remain `Unable to confirm`. Gate 4 decisions are recorded below; implementation remains outside this documentation step.
+Status: reconnaissance outputs recorded for the current Chrome and Edge scope. The page and script evidence is sufficient to classify the sampled page types as server-rendered HTML with native JavaScript and no observed framework-owned virtual DOM. P0-3 is resolved for `/matches` and the news/article CSS checks below; the match-detail `.match-page`/score-area CSS remains `Unable to confirm`. Gate 4 decisions are recorded below; implementation remains outside this documentation step.
 
 Access date: 2026-09-20. Capture requests used `curl.exe` with a full Chrome-style browser user agent and `Accept-Language: en-US`, sequentially with at least two seconds between requests. No Puppeteer, Playwright, parallel request, or retry loop was used.
 
@@ -140,6 +140,88 @@ The extension must not translate or append to these comment-time nodes because t
 
 Conclusion: comments are SSR content, and Mode B is approved only for a whole `.forum-middle` body that is confidently classified as English. Other languages, low-confidence classifications, failed classifications, and comments containing Chinese characters remain unchanged. Comment translation never uses the event-name partial-translation path. The CSS conclusion is limited to this comment area; it is not evidence about news `newsline` or match-detail `.match-page`/score containers.
 
+## 3B. Targeted news and article CSS reconnaissance
+
+Evidence basis for this subsection: owner-supplied curl captures from 2026-09-20, with at least two seconds between requests:
+
+- News archive: `https://www.hltv.org/news/archive/2026/september`, HTTP 200, 355,372 bytes, title `HLTV.org - News Archive September, 2026 | HLTV.org`.
+- News article: `https://www.hltv.org/news/45553/aurora-punish-limp-vitality-offense-to-reach-first-final-with-new-roster`, HTTP 200, 320,875 bytes.
+- Primary stylesheet: `https://resources.hltv.org/hltv-everything.css/fdddc7f98fef6cb157c3efd609bb3360.css`, 2,524,977 bytes.
+
+1. Both HTML responses are SSR and contain no framework or htmx activation markers: `data-reactroot`, `__NEXT_DATA__`, `data-v-`, `hx-get`, `hx-swap`, and `x-data` each occurred zero times.
+2. The archive list uses this structure:
+
+```html
+<h2>September 2026</h2>
+<div class="standard-box standard-list">
+  <a href="/news/45557/50000-winline-cis-lan-season-9-announced"
+     class="newsline article">
+    <img class="newsflag flag" title="Russia">
+    <div class="newstext">$50,000 WINLINE CIS LAN Season 9 announced </div>
+    <div class="newstc">
+      <div class="newsrecent">2026-09-20</div>
+      <div>35 comments</div>
+    </div>
+  </a>
+</div>
+```
+
+The title container is `.newstext`. Date and comment-count metadata are inside `.newstc`.
+3. The archive title is Mode B-feasible in the inspected scope:
+
+```css
+.index .newstext{color:var(--a-color);flex:1 1 auto;font-size:14px;
+                 font-weight:700;line-height:20px;text-decoration:none}
+.index .newstext{font-size:13px;line-height:18px}
+```
+
+`flex:1 1 auto` makes `.newstext` a flexible item with no fixed width and no `overflow:hidden` in the supplied rule set.
+3b. The selector is scope-dependent. The archive HTML contains an enclosing `<div class="index">`, so the `.index .newstext` rule applies to this sample. This evidence must not be reused for a `.newstext` outside an `.index` ancestor without a separate check.
+4. `.newstc` is not an insertion target:
+
+```css
+.index .newstc{color:var(--news-time-color);font-size:11px;font-weight:400;
+               line-height:11px;margin:-1px 0;min-width:80px;text-align:right}
+```
+
+The `min-width:80px` and right alignment are hard compact-layout constraints. Keep this metadata unchanged and do not append translation nodes.
+5. The article body uses:
+
+```html
+<div class="newsdsl">
+  <div class="newstext-con">
+    <p class="headertext" itemprop="description">...</p>
+    <p class="news-block"><a href="/team/11861/aurora">Aurora</a> are through to ...</p>
+    <p class="news-block">It is the first final for
+      <a href="/player/19677/kyxsan">...</a>
+    </p>
+  </div>
+</div>
+```
+
+The prose targets are `p.news-block` inside `.newsdsl > .newstext-con`. Embedded team/player links carry identifiers and remain protected.
+6. Article prose is Mode B-feasible in this inspected scope:
+
+```css
+.newsdsl .newstext-con{font-size:16px;line-height:28px;position:relative}
+.newsdsl .newstext-con{font-size:15px;line-height:24.75px}
+.newsdsl .newstext-con ul li .news-block{margin:4px 0}
+```
+
+`.news-block` itself has margin rules only; no fixed width, fixed height, or `overflow:hidden` was found.
+7. Position-selector risk was not found at these news targets. For `.news-block`, `.newsline`, `.newstext`, and `.article`, `:nth-child`, `:first-child`, and `:last-child` queries were all zero.
+8. Article dates are dynamic fields:
+
+```html
+<div class="date" data-time-format="d-M-yyyy HH:mm"
+     data-unix="1789842660000">19-9-2026 20:31</div>
+```
+
+The date is covered by the same dynamic rewrite logic recorded for comment times.
+9. The no-translation rule for an element carrying both `data-time-format` and `data-unix` is therefore global across the inspected evidence: match-list `.match-time`, comment `span.time`, article `div.date`, and match-detail time fields. Such nodes must not be translated or receive an appended translation sibling.
+
+Resolution: the previous `Unable to confirm` status for the news `newsline`/`newstext` parent CSS is resolved for the inspected archive `.index` structure and article `.newsdsl .newstext-con`/`.news-block` structure. The match-detail `.match-page`/score-area parent CSS remains `Unable to confirm` and is not covered by these news conclusions.
+
 ## 4. P0-1: page-type consistency
 
 Result: confirmed for the three sampled page types plus the supplied match-list evidence, with the following boundary:
@@ -198,11 +280,11 @@ The real constraint found in the same stylesheet is dimension-related:
 
 Conclusion: the /matches scan found no target-parent position dependency; the primary Mode B risk is fixed width/height clipping or overflow on `match-stage` and `match-meta`, not positional misalignment. Structurally, `match-teamname`, `match-event`, and `match-time` have no target fixed-width rule found in this scan; Gate 4 nevertheless excludes `match-teamname` from translation by owner decision. `match-event` and `match-time` remain bilingual-feasible candidates, while `match-stage` and `match-meta` are Mode A only.
 
-Evidence boundary: these CSS conclusions cover `/matches` only. Parent-level CSS for match-detail `.match-page`/score areas and for news `newsline`/`newstext` was not checked in this pass and remains `Unable to confirm`. No `/matches` conclusion is transferred to those containers. The absence of positional selectors in the previously captured news and match-detail sources is not a substitute for that page-specific parent-CSS check.
+Evidence boundary: the match-list CSS conclusion covers `/matches` only; the news/article CSS conclusion covers the inspected `.index` archive and `.newsdsl .newstext-con` article structure. Parent-level CSS for the match-detail `.match-page`/score area was not checked and remains `Unable to confirm`. No `/matches`, news, or article conclusion is transferred to that container.
 
 ## 7. Layout and runtime limits
 
-No normal/narrow viewport visual measurement, browser reload comparison, or MutationObserver trace was performed in this curl-only pass. The static `/matches` CSS establishes the fixed-dimension constraints above, but the exact rendered clipping or overflow under a future Mode B implementation remains `Unable to confirm`. Runtime behavior and all page-specific layout behavior outside `/matches` remain limits rather than inferences from class names.
+No normal/narrow viewport visual measurement, browser reload comparison, or MutationObserver trace was performed in this curl-only pass. The static `/matches` and news/article CSS establishes the documented fixed-dimension and flexible-container constraints, but exact rendered clipping, overflow, or scroll-position changes under a future Mode B implementation remain `Unable to confirm`. Runtime behavior and the uninspected match-detail score-area layout remain limits rather than inferences from class names.
 
 ## 8. robots.txt and route-resolution evidence
 
@@ -216,6 +298,6 @@ The captured sitemap index listed `https://www.hltv.org/news-sitemap.xml`. That 
 - Gate 3B/P0-1: no framework or target-container positional update was found in the supplied/inspected evidence, subject to the scope limits above.
 - P0-2: live scores are wired through the Socket.IO livescore module and `score` events; runtime interval remains unmeasured.
 - Gate 3B/P0-3: resolved for `/matches`. The local CSS scan found no target-parent positional selector; the observed `:nth-child` rules are on `.match-time-wrapper`, while fixed dimensions constrain `match-stage` and `match-meta`.
-- P0-3 remains page-scoped: match-detail `.match-page`/score CSS and news `newsline`/`newstext` parent CSS are `Unable to confirm` because they were not checked.
+- P0-3 remains page-scoped: match-detail `.match-page`/score CSS is `Unable to confirm` because it was not checked; news/article parent CSS is resolved only for the documented `.index` and `.newsdsl .newstext-con` structures.
 
 The `/matches` P0-3 evidence gap is closed and Gate 4 decisions are recorded in `docs/display-strategy.md`. The uninspected page-specific CSS boundaries remain explicit and no display implementation, translation API, DOM insertion, or network interception is authorized by these findings in this documentation step.
