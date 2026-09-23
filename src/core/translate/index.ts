@@ -1,3 +1,11 @@
+import { parseProviderBaseURL } from '../../shared/provider-url.ts';
+import {
+  DEFAULT_TRANSLATION_CONTEXT,
+  type TranslationContext
+} from '../../shared/translation-context.ts';
+
+export type { TranslationContext } from '../../shared/translation-context.ts';
+
 export interface GlossaryEntry {
   term: string;
   target: string;
@@ -294,6 +302,50 @@ export function lookupEntries(
   }));
 }
 
+function translateGlossaryCoveredText(
+  text: string,
+  glossary: GlossaryDocument
+): string | undefined {
+  const matches = findMatches(text, glossary);
+  if (matches.length === 0) {
+    return undefined;
+  }
+
+  let foundLetter = false;
+  for (let index = 0; index < text.length;) {
+    const codePoint = text.codePointAt(index);
+    if (codePoint === undefined) {
+      break;
+    }
+    const character = String.fromCodePoint(codePoint);
+    const nextIndex = index + character.length;
+    if (/\p{L}/u.test(character)) {
+      foundLetter = true;
+      const covered = matches.some(
+        (match) => index >= match.start && nextIndex <= match.end
+      );
+      if (!covered) {
+        return undefined;
+      }
+    }
+    index = nextIndex;
+  }
+  if (!foundLetter) {
+    return undefined;
+  }
+
+  let translated = '';
+  let cursor = 0;
+  for (const match of matches) {
+    translated += text.slice(cursor, match.start);
+    translated += match.entry.keep_as_is
+      ? match.matchedText
+      : match.entry.target;
+    cursor = match.end;
+  }
+  return translated + text.slice(cursor);
+}
+
 export function isEntirelyKeepAsIs(
   text: string,
   glossary: GlossaryDocument
@@ -358,9 +410,21 @@ function makeDecision(
 }
 
 function isPureDate(text: string): boolean {
-  return /^\s*(?:\d{4}[-/.]\d{1,2}[-/.]\d{1,2}|\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4})\s*$/u.test(
-    text
-  );
+  if (
+    /^\s*(?:\d{4}[-/.]\d{1,2}[-/.]\d{1,2}|\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4})\s*$/u.test(
+      text
+    )
+  ) {
+    return true;
+  }
+
+  const month =
+    '(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)';
+  const day = '\\d{1,2}(?:st|nd|rd|th)?';
+  return new RegExp(
+    `^\\s*(?:${month}\\s+${day}(?:,?\\s+\\d{4})?|${month}\\s+\\d{4}|${day}\\s+${month}(?:,?\\s+\\d{4})?)\\s*$`,
+    'iu'
+  ).test(text);
 }
 
 function isPureNumber(text: string): boolean {
@@ -405,9 +469,24 @@ function isConservativeShortText(text: string): boolean {
   );
 }
 
+function hasOnlyLatinLetters(text: string): boolean {
+  let foundLatinLetter = false;
+  for (const character of text) {
+    if (!/\p{L}/u.test(character)) {
+      continue;
+    }
+    if (!/\p{Script=Latin}/u.test(character)) {
+      return false;
+    }
+    foundLatinLetter = true;
+  }
+  return foundLatinLetter;
+}
+
 export function classifyText(
   text: string,
-  glossary: GlossaryDocument
+  glossary: GlossaryDocument,
+  context: TranslationContext = DEFAULT_TRANSLATION_CONTEXT
 ): LanguageDecision {
   const trimmed = text.trim();
   const keepMatches = findKeepAsIsMatches(text, glossary);
@@ -469,6 +548,49 @@ export function classifyText(
   const containsHan = /\p{Script=Han}/u.test(trimmed);
   const tokens = trimmed.match(/[A-Za-z]+(?:'[A-Za-z]+)?/gu) ?? [];
   const latinCount = (trimmed.match(/[A-Za-z]/gu) ?? []).length;
+
+  if (!hasOnlyLatinLetters(trimmed)) {
+    return makeDecision(
+      text,
+      'uncertain',
+      false,
+      0.25,
+      'Text does not contain English-only letter signals.',
+      keepMatches
+    );
+  }
+
+  if (context === 'structured') {
+    return makeDecision(
+      text,
+      'translatable',
+      true,
+      0.9,
+      'Structured content contains Latin-script text.',
+      keepMatches
+    );
+  }
+
+  if (context === 'prose') {
+    if (latinCount < 5 || tokens.length < 2) {
+      return makeDecision(
+        text,
+        'uncertain',
+        false,
+        0.4,
+        'Prose did not meet the minimum English word and letter threshold.',
+        keepMatches
+      );
+    }
+    return makeDecision(
+      text,
+      'translatable',
+      true,
+      0.8,
+      'Prose contains multiple Latin-script words.',
+      keepMatches
+    );
+  }
 
   if (
     containsHan ||
@@ -547,8 +669,12 @@ export interface OpenAICompatibleProviderConfig {
   model: string;
   apiKey: string;
   timeoutMs: number;
+  temperature?: number;
+  useJsonOutputMode?: boolean;
   transport: ChatCompletionsTransport;
 }
+
+export const DEFAULT_PROVIDER_TEMPERATURE = 0.2;
 
 class RequestTimeoutError extends Error {}
 
@@ -573,10 +699,6 @@ async function sendWithTimeout(
   }
 }
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
 function parseProviderTranslations(
   payload: unknown,
   expectedLength: number
@@ -595,31 +717,107 @@ function parseProviderTranslations(
     return undefined;
   }
 
+  const fencedContent = content.trim();
+  const fence = /^\x60{3}(?:json)?\s*([\s\S]*?)\s*\x60{3}$/iu.exec(fencedContent);
   let parsedContent: unknown;
   try {
-    parsedContent = JSON.parse(content) as unknown;
+    parsedContent = JSON.parse((fence?.[1] ?? fencedContent).trim()) as unknown;
   } catch {
     return undefined;
   }
 
   if (
-    !Array.isArray(parsedContent) ||
-    parsedContent.length !== expectedLength ||
-    !parsedContent.every((value): value is string => typeof value === 'string')
+    !isRecord(parsedContent) ||
+    Object.keys(parsedContent).length !== 1 ||
+    !Array.isArray(parsedContent.translations) ||
+    parsedContent.translations.length !== expectedLength ||
+    !parsedContent.translations.every(
+      (value): value is string => typeof value === 'string'
+    )
   ) {
     return undefined;
   }
 
-  return parsedContent;
+  return parsedContent.translations;
+}
+
+function createChatCompletionsEndpoint(baseURL: string): string {
+  const parsed = parseProviderBaseURL(baseURL);
+  if (parsed === undefined) {
+    throw new Error('Invalid provider base URL.');
+  }
+  return parsed.endpoint;
+}
+
+function mentionsResponseFormat(value: unknown): boolean {
+  if (typeof value === 'string') {
+    return /response[_\s-]?format/iu.test(value);
+  }
+  if (Array.isArray(value)) {
+    return value.some(mentionsResponseFormat);
+  }
+  if (!isRecord(value)) {
+    return false;
+  }
+  return Object.entries(value).some(
+    ([key, child]) =>
+      /response[_\s-]?format/iu.test(key) || mentionsResponseFormat(child)
+  );
 }
 
 export function createOpenAICompatibleProvider(
   config: OpenAICompatibleProviderConfig
 ): TranslationProvider {
-  const endpoint = `${config.baseURL.replace(/\/+$/u, '')}/chat/completions`;
+  const endpoint = createChatCompletionsEndpoint(config.baseURL);
+  const temperature =
+    config.temperature ?? DEFAULT_PROVIDER_TEMPERATURE;
+  const useJsonOutputMode = config.useJsonOutputMode ?? true;
+  const systemPrompt = [
+    '你是 CS2 新闻与赛事名称翻译器。把输入中的每一条英文翻译成简体中文。',
+    '',
+    '输入包含 items 数组。每项都有 index、purpose、text 和 protected_fragments。输出 translations 数组必须按输入顺序逐项对应，条数必须与 items 完全相同。',
+    '',
+    '保护片段来自 glossary 中 keep_as_is 为 true 的条目。用户数据会针对每条输入逐条列出 protected_fragments。不得翻译、改写、增删、拆分或改变其中任何片段的字符；每个保护片段必须在对应译文中原样出现。',
+    '',
+    'purpose 为 event-name 时，保留赛事及品牌名称。尤其要逐字保留该条目的全部 protected_fragments。允许调整其他词语的语序，使名称符合简体中文习惯，例如将季节和年份调整到赛事名称之前。',
+    '',
+    'purpose 为 plain 时，将可翻译内容自然地翻译成简体中文，并保留原文中的事实、数字和含义。',
+    '',
+    '只输出一个合法 JSON 对象，形状必须为 {"translations":["译文"]}。不要输出解释、额外字段、前后缀或 Markdown 代码块围栏。',
+    '',
+    '最小示例：',
+    '输入：{"items":[{"index":1,"purpose":"event-name","text":"Fall 2026 StarLadder StarSeries","protected_fragments":["StarLadder StarSeries"]}]}',
+    '输出：{"translations":["2026 秋季赛 StarLadder StarSeries"]}'
+  ].join('\n');
 
   return {
     async translate(request) {
+      const messages = [
+        {
+          role: 'system',
+          content: systemPrompt
+        },
+        {
+          role: 'user',
+          content: JSON.stringify({
+            items: request.texts.map((text, index) => ({
+              index: index + 1,
+              purpose: request.purposes[index] ?? 'plain',
+              text,
+              protected_fragments: request.protectedFragments[index] ?? []
+            }))
+          })
+        }
+      ];
+      const body: Record<string, unknown> = {
+        model: config.model,
+        temperature,
+        messages
+      };
+      if (useJsonOutputMode) {
+        body.response_format = { type: 'json_object' };
+      }
+
       const transportRequest: ChatCompletionsTransportRequest = {
         url: endpoint,
         headers: {
@@ -627,25 +825,7 @@ export function createOpenAICompatibleProvider(
           'Content-Type': 'application/json'
         },
         timeoutMs: config.timeoutMs,
-        body: JSON.stringify({
-          model: config.model,
-          temperature: 0,
-          messages: [
-            {
-              role: 'system',
-              content:
-                'Translate each text and return only a JSON string array. Protected fragments must remain character-for-character unchanged.'
-            },
-            {
-              role: 'user',
-              content: JSON.stringify({
-                texts: request.texts,
-                protectedFragments: request.protectedFragments,
-                purposes: request.purposes
-              })
-            }
-          ]
-        })
+        body: JSON.stringify(body)
       };
 
       let response: ChatCompletionsTransportResponse;
@@ -663,18 +843,37 @@ export function createOpenAICompatibleProvider(
               error instanceof RequestTimeoutError
                 ? 'timeout'
                 : 'transport-error',
-            message: errorMessage(error)
+            message:
+              error instanceof RequestTimeoutError
+                ? 'Provider request timed out.'
+                : 'Network request failed.'
           }
         };
       }
 
       if (response.status < 200 || response.status >= 300) {
+        let rejectedResponseFormat = false;
+        if (
+          useJsonOutputMode &&
+          response.status >= 400 &&
+          response.status < 500
+        ) {
+          try {
+            rejectedResponseFormat = mentionsResponseFormat(
+              await response.json()
+            );
+          } catch {
+            // Provider error bodies are untrusted and are never surfaced.
+          }
+        }
         return {
           ok: false,
           error: {
             code: 'http-error',
             status: response.status,
-            message: `Provider returned HTTP ${response.status}.`
+            message: rejectedResponseFormat
+              ? 'Provider rejected response_format.'
+              : 'Provider returned HTTP ' + response.status + '.'
           }
         };
       }
@@ -682,12 +881,12 @@ export function createOpenAICompatibleProvider(
       let payload: unknown;
       try {
         payload = await response.json();
-      } catch (error) {
+      } catch {
         return {
           ok: false,
           error: {
             code: 'invalid-response',
-            message: errorMessage(error)
+            message: 'Provider returned invalid JSON.'
           }
         };
       }
@@ -701,7 +900,7 @@ export function createOpenAICompatibleProvider(
           ok: false,
           error: {
             code: 'invalid-response',
-            message: 'Provider response did not contain the required string array.'
+            message: 'Provider response did not contain a valid translations array.'
           }
         };
       }
@@ -877,6 +1076,18 @@ export function hashText(text: string): string {
   return hash.toString(16).padStart(8, '0');
 }
 
+/**
+ * B3b format: v2:<purpose>:<text hash>. B3a used the bare text hash, so its
+ * records become inert cache misses and remain until the user clears cache.
+ */
+function createTranslationCacheKey(
+  text: string,
+  purpose: TranslationPurpose,
+  hash: TextHasher
+): string {
+  return 'v2:' + purpose + ':' + hash(text);
+}
+
 export interface UncertainClassificationRecord {
   text: string;
   decision: LanguageDecision;
@@ -890,6 +1101,7 @@ export interface TranslationServiceDependencies {
   glossary: GlossaryDocument;
   provider: TranslationProvider;
   cacheStore: CacheStore;
+  context?: TranslationContext;
   hash?: TextHasher;
   onUncertainClassification?: UncertainClassificationSink;
 }
@@ -905,103 +1117,163 @@ export function createTranslationService(
   const hash = dependencies.hash ?? hashText;
   const inFlight = new Map<string, Promise<string>>();
 
-  async function resolveOne(
-    text: string,
-    purpose: TranslationPurpose,
-    key: string,
-    protectedFragments: string[]
-  ): Promise<string> {
-    let cached: string | undefined;
-    try {
-      cached = await dependencies.cacheStore.get(key);
-    } catch {
-      cached = undefined;
-    }
-
-    if (cached !== undefined) {
-      return cached;
-    }
-
-    let providerResult: ProviderResult;
-    try {
-      providerResult = await dependencies.provider.translate({
-        texts: [text],
-        protectedFragments: [protectedFragments],
-        purposes: [purpose]
-      });
-    } catch {
-      return text;
-    }
-
-    if (!providerResult.ok || providerResult.translations.length !== 1) {
-      return text;
-    }
-
-    const translated = providerResult.translations[0];
-    if (translated === undefined) {
-      return text;
-    }
-
-    const validation = validateTranslation(
-      text,
-      translated,
-      protectedFragments,
-      purpose,
-      dependencies.glossary
-    );
-    if (!validation.ok) {
-      return text;
-    }
-
-    try {
-      await dependencies.cacheStore.set(key, translated);
-    } catch {
-      // Cache persistence is best effort; the successful translation remains usable.
-    }
-    return translated;
+  interface PendingTranslation {
+    cacheKey: string;
+    text: string;
+    purpose: TranslationPurpose;
+    protectedFragments: string[];
+    promise: Promise<string>;
+    resolve(value: string): void;
   }
 
   async function translateBatch(
     texts: string[],
     purpose: TranslationPurpose
   ): Promise<string[]> {
-    return Promise.all(
-      texts.map(async (text) => {
-        const decision = classifyText(text, dependencies.glossary);
-        if (decision.reviewRequired) {
-          dependencies.onUncertainClassification?.({ text, decision });
-        }
+    const results = [...texts];
+    const owned = new Map<string, PendingTranslation>();
+    const waiters: Array<{ index: number; promise: Promise<string> }> = [];
 
-        if (!decision.shouldTranslate) {
-          return text;
-        }
+    for (let index = 0; index < texts.length; index += 1) {
+      const text = texts[index] as string;
+      const glossaryTranslation = translateGlossaryCoveredText(
+        text,
+        dependencies.glossary
+      );
+      if (glossaryTranslation !== undefined) {
+        results[index] = glossaryTranslation;
+        continue;
+      }
 
-        const key = hash(text);
-        const existing = inFlight.get(key);
-        if (existing !== undefined) {
-          return existing;
-        }
+      const decision = classifyText(
+        text,
+        dependencies.glossary,
+        dependencies.context ?? DEFAULT_TRANSLATION_CONTEXT
+      );
+      if (decision.reviewRequired) {
+        dependencies.onUncertainClassification?.({ text, decision });
+      }
+      if (!decision.shouldTranslate) {
+        continue;
+      }
 
+      const cacheKey = createTranslationCacheKey(text, purpose, hash);
+      const existing = inFlight.get(cacheKey);
+      if (existing !== undefined) {
+        waiters.push({ index, promise: existing });
+        continue;
+      }
+
+      let pending = owned.get(cacheKey);
+      if (pending === undefined) {
+        let resolve!: (value: string) => void;
+        const promise = new Promise<string>((accept) => {
+          resolve = accept;
+        });
         const protectedFragments = findKeepAsIsMatches(
           text,
           dependencies.glossary
         ).map((match) => match.matchedText);
-
-        const pending = resolveOne(
+        pending = {
+          cacheKey,
           text,
           purpose,
-          key,
-          protectedFragments
-        ).finally(() => {
-          if (inFlight.get(key) === pending) {
-            inFlight.delete(key);
-          }
-        });
+          protectedFragments,
+          promise,
+          resolve
+        };
+        owned.set(cacheKey, pending);
+        inFlight.set(cacheKey, promise);
+      }
+      waiters.push({ index, promise: pending.promise });
+    }
 
-        inFlight.set(key, pending);
-        return pending;
+    const candidates = Array.from(owned.values());
+    const cacheResults = await Promise.all(
+      candidates.map(async (candidate) => {
+        try {
+          return await dependencies.cacheStore.get(candidate.cacheKey);
+        } catch {
+          return undefined;
+        }
       })
     );
+    const misses: PendingTranslation[] = [];
+
+    for (let index = 0; index < candidates.length; index += 1) {
+      const candidate = candidates[index] as PendingTranslation;
+      const cached = cacheResults[index];
+      if (cached !== undefined) {
+        candidate.resolve(cached);
+        if (inFlight.get(candidate.cacheKey) === candidate.promise) {
+          inFlight.delete(candidate.cacheKey);
+        }
+      } else {
+        misses.push(candidate);
+      }
+    }
+
+    if (misses.length > 0) {
+      let providerResult: ProviderResult | undefined;
+      try {
+        providerResult = await dependencies.provider.translate({
+          texts: misses.map((candidate) => candidate.text),
+          protectedFragments: misses.map(
+            (candidate) => candidate.protectedFragments
+          ),
+          purposes: misses.map((candidate) => candidate.purpose)
+        });
+      } catch {
+        providerResult = undefined;
+      }
+
+      const validTranslations =
+        providerResult?.ok === true &&
+        Array.isArray(providerResult.translations) &&
+        providerResult.translations.length === misses.length &&
+        providerResult.translations.every(
+          (translation): translation is string =>
+            typeof translation === 'string'
+        )
+          ? providerResult.translations
+          : undefined;
+
+      for (let index = 0; index < misses.length; index += 1) {
+        const candidate = misses[index] as PendingTranslation;
+        const translated = validTranslations?.[index];
+        let value = candidate.text;
+
+        if (translated !== undefined) {
+          const validation = validateTranslation(
+            candidate.text,
+            translated,
+            candidate.protectedFragments,
+            candidate.purpose,
+            dependencies.glossary
+          );
+          if (validation.ok) {
+            value = translated;
+            try {
+              await dependencies.cacheStore.set(candidate.cacheKey, translated);
+            } catch {
+              // Cache persistence is best effort; the translation remains usable.
+            }
+          }
+        }
+
+        candidate.resolve(value);
+        if (inFlight.get(candidate.cacheKey) === candidate.promise) {
+          inFlight.delete(candidate.cacheKey);
+        }
+      }
+    }
+
+    await Promise.all(
+      waiters.map(async ({ index, promise }) => {
+        results[index] = await promise;
+      })
+    );
+    return results;
   }
 
   return {

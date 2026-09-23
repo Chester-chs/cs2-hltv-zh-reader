@@ -1,9 +1,13 @@
-import type { TranslationService } from '../core/translate/index.ts';
+import type {
+  TranslationContext,
+  TranslationPurpose,
+  TranslationService
+} from '../core/translate/index.ts';
 import {
   decodeTranslateResponse,
   encodeTranslateRequest,
   type TranslateRequest,
-  type TranslationPurpose
+  type TranslationPurpose as ProtocolTranslationPurpose
 } from '../background/protocol.ts';
 
 export interface ContentMessageSender {
@@ -17,6 +21,14 @@ export interface BackgroundTranslationServiceOptions {
 }
 
 export const DEFAULT_CONTENT_TIMEOUT_MS = 6000;
+
+export interface ContextualTranslationAdapter {
+  translateWithContext(
+    texts: string[],
+    context: TranslationContext,
+    purpose: TranslationPurpose
+  ): Promise<string[]>;
+}
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   return new Promise((resolve) => {
@@ -44,14 +56,15 @@ function defaultRequestIdFactory(): () => string {
 
 export function createBackgroundTranslationService(
   options: BackgroundTranslationServiceOptions
-): TranslationService {
+): TranslationService & ContextualTranslationAdapter {
   const timeoutMs = options.timeoutMs ?? DEFAULT_CONTENT_TIMEOUT_MS;
   const requestId = options.requestId ?? defaultRequestIdFactory();
   const sessionResults = new Map<string, string>();
 
   async function translateBatch(
     texts: string[],
-    purpose: TranslationPurpose
+    purpose: ProtocolTranslationPurpose,
+    context: TranslationContext
   ): Promise<string[]> {
     if (texts.length === 0) {
       return [];
@@ -61,7 +74,7 @@ export function createBackgroundTranslationService(
     const missing = new Map<string, number[]>();
     for (let index = 0; index < texts.length; index += 1) {
       const text = texts[index] as string;
-      const sessionKey = `${purpose}\u0000${text}`;
+      const sessionKey = `${purpose}\u0000${context}\u0000${text}`;
       const cached = sessionResults.get(sessionKey);
       if (cached !== undefined) {
         results[index] = cached;
@@ -81,6 +94,7 @@ export function createBackgroundTranslationService(
       type: 'hltv-zh-translate-request',
       requestId: requestId(),
       purpose,
+      context,
       texts: missingEntries.map(([, indexes]) => texts[indexes[0] as number] as string)
     });
 
@@ -115,10 +129,13 @@ export function createBackgroundTranslationService(
 
   return {
     translate(texts) {
-      return translateBatch(texts, 'plain');
+      return translateBatch(texts, 'plain', 'comment');
     },
     translateEventNames(texts) {
-      return translateBatch(texts, 'event-name');
+      return translateBatch(texts, 'event-name', 'comment');
+    },
+    translateWithContext(texts, context, purpose) {
+      return translateBatch(texts, purpose, context);
     }
   };
 }

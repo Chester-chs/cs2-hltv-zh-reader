@@ -2,17 +2,25 @@ import {
   createDisplayRecordTable,
   decideRenderIntent,
   DISPLAY_SELECTORS,
+  getTranslationContextForStrategyId,
   resolveElementStrategy,
   type DisplayMode,
   type DisplayNodeInfo,
   type DisplayRecordTable
 } from '../core/display/index.ts';
 import type { TranslationService } from '../core/translate/index.ts';
+import type { TranslationContext, TranslationPurpose } from '../core/translate/index.ts';
 
 export type ContentTranslator = Pick<
   TranslationService,
   'translate' | 'translateEventNames'
->;
+> & {
+  translateWithContext?: (
+    texts: string[],
+    context: TranslationContext,
+    purpose: TranslationPurpose
+  ) => Promise<string[]>;
+};
 
 export type ContentDiagnosticCode =
   | 'register-rejected'
@@ -68,6 +76,7 @@ interface PendingRecord {
   key: string;
   strategyId: string;
   original: string;
+  context: TranslationContext;
 }
 
 const observerOptions: MutationObserverInit = {
@@ -345,54 +354,78 @@ class ContentRuntimeImpl implements ContentRuntime {
         pending.push({
           key,
           strategyId: strategy.id,
-          original: textNode.data
+          original: textNode.data,
+          context: getTranslationContextForStrategyId(strategy.id)
         });
       }
     }
 
-    const eventRecords = pending.filter((record) => record.strategyId === 'match-event');
-    const plainRecords = pending.filter((record) => record.strategyId !== 'match-event');
-    const eventTranslations = await this.translate(
-      eventRecords.map((record) => record.original),
-      true
-    );
-    const translatablePlainRecords = plainRecords.filter(
-      (record) => this.records.get(record.key)?.strategy.translation === 'allowed'
-    );
-    const plainTranslations = await this.translate(
-      translatablePlainRecords.map((record) => record.original),
-      false
+    const groups = new Map<
+      string,
+      { context: TranslationContext; purpose: TranslationPurpose; records: PendingRecord[] }
+    >();
+    for (const record of pending) {
+      const current = this.records.get(record.key);
+      if (current?.strategy.translation !== 'allowed') {
+        continue;
+      }
+      const purpose: TranslationPurpose =
+        record.strategyId === 'match-event' ? 'event-name' : 'plain';
+      const groupKey = `${record.context}\u0000${purpose}`;
+      const group = groups.get(groupKey) ?? {
+        context: record.context,
+        purpose,
+        records: []
+      };
+      group.records.push(record);
+      groups.set(groupKey, group);
+    }
+
+    const translationsByKey = new Map<string, string>();
+    await Promise.all(
+      Array.from(groups.values(), async (group) => {
+        const translations = await this.translate(
+          group.records.map((record) => record.original),
+          group.purpose,
+          group.context
+        );
+        group.records.forEach((record, index) => {
+          translationsByKey.set(record.key, translations[index] ?? record.original);
+        });
+      })
     );
 
-    let plainIndex = 0;
     for (const record of pending) {
       const current = this.records.get(record.key);
       if (current === undefined) {
         continue;
       }
 
-      if (record.strategyId === 'match-event') {
+      if (current.strategy.translation === 'allowed') {
         this.records.updateTranslation(
           record.key,
-          eventTranslations[eventRecords.indexOf(record)]
+          translationsByKey.get(record.key) ?? record.original
         );
-      } else if (current.strategy.translation === 'allowed') {
-        this.records.updateTranslation(record.key, plainTranslations[plainIndex]);
-        plainIndex += 1;
       }
       await this.applyRecord(record.key);
     }
   }
 
-  private async translate(texts: string[], eventNames: boolean): Promise<string[]> {
+  private async translate(
+    texts: string[],
+    purpose: TranslationPurpose,
+    context: TranslationContext
+  ): Promise<string[]> {
     if (texts.length === 0) {
       return [];
     }
 
     try {
-      const translations = eventNames
-        ? await this.translator.translateEventNames(texts)
-        : await this.translator.translate(texts);
+      const translations = this.translator.translateWithContext !== undefined
+        ? await this.translator.translateWithContext(texts, context, purpose)
+        : purpose === 'event-name'
+          ? await this.translator.translateEventNames(texts)
+          : await this.translator.translate(texts);
       if (
         translations.length !== texts.length ||
         translations.some((translation) => typeof translation !== 'string')

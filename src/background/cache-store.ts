@@ -3,6 +3,11 @@ import type { CacheStore } from '../core/translate/index.ts';
 export interface CacheBackend {
   get(key: string): Promise<string | undefined>;
   set(key: string, value: string): Promise<void>;
+  clear?(): Promise<number>;
+}
+
+export interface CacheManagementStore extends CacheStore {
+  clear(): Promise<number>;
 }
 
 export type CacheDiagnosticCode =
@@ -24,7 +29,7 @@ function describeError(error: unknown): string {
 export function createCacheStoreFromBackend(
   backend: CacheBackend,
   onDiagnostic: CacheDiagnosticSink = () => {}
-): CacheStore {
+): CacheManagementStore {
   return {
     async get(key) {
       try {
@@ -48,6 +53,16 @@ export function createCacheStoreFromBackend(
           message: describeError(error)
         });
         // A successful translation must remain usable when persistence fails.
+      }
+    },
+    async clear() {
+      if (backend.clear === undefined) {
+        throw new Error('Translation cache clearing is unavailable.');
+      }
+      try {
+        return await backend.clear();
+      } catch {
+        throw new Error('Translation cache could not be cleared.');
       }
     }
   };
@@ -76,6 +91,14 @@ function requestPromise<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error ?? new Error('IndexedDB request failed.'));
+  });
+}
+
+function transactionPromise(transaction: IDBTransaction): Promise<void> {
+  return new Promise((resolve, reject) => {
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error ?? new Error('IndexedDB transaction failed.'));
+    transaction.onabort = () => reject(transaction.error ?? new Error('IndexedDB transaction aborted.'));
   });
 }
 
@@ -125,13 +148,27 @@ function createIndexedDbBackend(
       const database = await open();
       const transaction = database.transaction(storeName, 'readwrite');
       await requestPromise(transaction.objectStore(storeName).put({ key, value }));
+    },
+    async clear() {
+      const database = await open();
+      const transaction = database.transaction(storeName, 'readwrite');
+      const completed = transactionPromise(transaction);
+      const objectStore = transaction.objectStore(storeName);
+      const countRequest = requestPromise(objectStore.count());
+      const clearRequest = requestPromise(objectStore.clear());
+      const [count] = await Promise.all([
+        countRequest,
+        clearRequest,
+        completed
+      ]);
+      return count;
     }
   };
 }
 
 export function createIndexedDbCacheStore(
   options: IndexedDbCacheStoreOptions = {}
-): CacheStore {
+): CacheManagementStore {
   const factory = options.indexedDB ?? globalThis.indexedDB;
   const backend = createIndexedDbBackend(
     factory,

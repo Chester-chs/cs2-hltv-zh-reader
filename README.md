@@ -17,7 +17,13 @@ Firefox is temporarily unsupported. Its content script injects, but the Firefox 
 
 ## Development status
 
-This project is currently in the reconnaissance stage. It has no usable functionality yet.
+The extension can translate supported English text on HLTV pages using an OpenAI-compatible provider configured in its options page. Configure a provider and grant access to its domain before translation can run.
+
+### Provider setup
+
+The default preset is DeepSeek (`https://api.deepseek.com`, model `deepseek-chat`). OpenAI is also available (`https://api.openai.com`, model `gpt-4o-mini`), and Custom accepts an HTTPS base URL or an HTTP loopback URL (`localhost`, `127.0.0.1`, or `[::1]`) with a model name. External hosts must use HTTPS. The extension requests host access only for the configured origin when settings are saved.
+
+The API Key is stored in `browser.storage.local` on this device. Translation and connection-test requests send it to the configured provider. It is not synchronized with a browser account or sent to the extension developer.
 
 ## Important disclaimer
 

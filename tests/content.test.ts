@@ -18,6 +18,7 @@ import {
   type ContentTranslator
 } from '../src/content/runtime.ts';
 import { createStubTranslationService } from '../src/content/stub-translator.ts';
+import type { TranslationContext, TranslationPurpose } from '../src/core/translate/index.ts';
 
 type FakeNode = FakeElement | FakeText;
 
@@ -171,6 +172,11 @@ class FakeObserver {
 class CountingTranslator implements ContentTranslator {
   readonly plainCalls: string[][] = [];
   readonly eventCalls: string[][] = [];
+  readonly contextualCalls: Array<{
+    texts: string[];
+    context: TranslationContext;
+    purpose: TranslationPurpose;
+  }> = [];
 
   async translate(texts: string[]): Promise<string[]> {
     this.plainCalls.push([...texts]);
@@ -180,6 +186,17 @@ class CountingTranslator implements ContentTranslator {
   async translateEventNames(texts: string[]): Promise<string[]> {
     this.eventCalls.push([...texts]);
     return texts.map((text) => `【译】${text}`);
+  }
+
+  async translateWithContext(
+    texts: string[],
+    context: TranslationContext,
+    purpose: TranslationPurpose
+  ): Promise<string[]> {
+    this.contextualCalls.push({ texts: [...texts], context, purpose });
+    return purpose === 'event-name'
+      ? this.translateEventNames(texts)
+      : this.translate(texts);
   }
 }
 
@@ -262,6 +279,19 @@ test('scans match-list candidates and changes only text nodes', async () => {
   assert.equal(scoreText.data, '1');
   assert.equal(translator.eventCalls.length, 1);
   assert.equal(translator.plainCalls.length, 1);
+  assert.deepEqual(translator.contextualCalls, [
+    {
+      texts: ['StarLadder StarSeries Fall 2026'],
+      context: 'structured',
+      purpose: 'event-name'
+    },
+    { texts: ['Grand Final'], context: 'structured', purpose: 'plain' }
+  ]);
+  assert.equal(
+    translator.contextualCalls.some((call) => call.texts.includes('Aurora')),
+    false,
+    'match-teamname is blocked by its never-translate display strategy'
+  );
   assert.equal(diagnostics.length, 0);
   assert.equal(runtime.stats().processedNodes, 4);
 });

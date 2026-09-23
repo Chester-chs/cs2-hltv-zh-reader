@@ -5,6 +5,7 @@ import {
   type ProviderError,
   type ProviderResult,
   type TranslationProvider,
+  type TranslationContext,
   type TranslationPurpose
 } from '../core/translate/index.ts';
 import type { ExtensionSettings } from '../shared/settings.ts';
@@ -23,11 +24,19 @@ export interface CoreTranslationRunnerOptions {
   providerFactory: BackgroundProviderFactory;
 }
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
 function mapProviderError(error: ProviderError): BackgroundFailure {
+  const message =
+    error.code === 'timeout'
+      ? 'Provider request timed out.'
+      : error.code === 'invalid-response'
+        ? 'Provider returned an invalid response.'
+        : error.code === 'transport-error'
+          ? 'Network request failed.'
+          : error.message === 'Provider rejected response_format.'
+            ? 'Provider rejected response_format.'
+            : error.status !== undefined
+              ? `Provider returned HTTP ${error.status}.`
+              : 'Provider request failed.';
   return {
     code:
       error.code === 'timeout'
@@ -35,7 +44,7 @@ function mapProviderError(error: ProviderError): BackgroundFailure {
         : error.code === 'invalid-response'
           ? 'invalid-response'
           : 'provider-failure',
-    message: error.message
+    message
   };
 }
 
@@ -56,11 +65,12 @@ export function createCoreBackgroundTranslationRunner(
   translate(
     texts: string[],
     purpose: TranslationPurpose,
-    settings: ExtensionSettings
+    settings: ExtensionSettings,
+    context?: TranslationContext
   ): Promise<BackgroundTranslationResult>;
 } {
   return {
-    async translate(texts, purpose, settings) {
+    async translate(texts, purpose, settings, context = 'comment') {
       const observedFailures: ProviderError[] = [];
       const provider = options.providerFactory(settings);
       const observingProvider: TranslationProvider = {
@@ -71,12 +81,12 @@ export function createCoreBackgroundTranslationRunner(
               observedFailures.push(result.error);
             }
             return result;
-          } catch (error) {
+          } catch {
             observedFailures.push({
               code: 'transport-error',
-              message: errorMessage(error)
+              message: 'The provider operation failed.'
             });
-            throw error;
+            throw new Error('The provider operation failed.');
           }
         }
       };
@@ -84,7 +94,8 @@ export function createCoreBackgroundTranslationRunner(
       const service = createTranslationService({
         glossary: await options.glossary,
         provider: observingProvider,
-        cacheStore: options.cacheStore
+        cacheStore: options.cacheStore,
+        context
       });
 
       let translations: string[];
@@ -93,13 +104,13 @@ export function createCoreBackgroundTranslationRunner(
           purpose === 'event-name'
             ? await service.translateEventNames(texts)
             : await service.translate(texts);
-      } catch (error) {
+      } catch {
         return {
           ok: false,
           translations: [...texts],
           error: {
             code: 'provider-failure',
-            message: errorMessage(error)
+            message: 'The translation service failed.'
           }
         };
       }

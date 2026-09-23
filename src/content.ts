@@ -3,6 +3,7 @@ import { createBackgroundTranslationService } from './content/background-transla
 import { installDebugEventBridge } from './content/debug-bridge.ts';
 import { createContentRuntime } from './content/runtime.ts';
 import { loadContentSettings } from './content/settings.ts';
+import { applyContentSettingsChanges } from './content/settings-sync.ts';
 import type { TranslateRequest } from './background/protocol.ts';
 import type { ContentSettingsStorage } from './content/settings.ts';
 
@@ -29,7 +30,16 @@ async function startContentScript(): Promise<void> {
     }
   });
 
-  // Temporary B3a debug entry point via document events. B4 will replace it with real settings UI wiring.
+  browser.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName !== 'local') {
+      return;
+    }
+    void applyContentSettingsChanges(runtime, changes).catch(() => {
+      console.warn('[cs2-hltv-zh] content settings could not be applied');
+    });
+  });
+
+  // Temporary B3a document-event bridge retained for runtime diagnostics.
   installDebugEventBridge(document, runtime);
   await runtime.start();
 }

@@ -5,6 +5,7 @@ import {
   encodeTranslateResponse,
   type TranslateFailureCode,
   type TranslateResponse,
+  type TranslationContext,
   type TranslationPurpose
 } from './protocol.ts';
 import type { ExtensionSettings } from '../shared/settings.ts';
@@ -22,7 +23,8 @@ export interface BackgroundTranslationRunner {
   translate(
     texts: string[],
     purpose: TranslationPurpose,
-    settings: ExtensionSettings
+    settings: ExtensionSettings,
+    context?: TranslationContext
   ): Promise<BackgroundTranslationResult>;
 }
 
@@ -30,6 +32,7 @@ export interface BackgroundMessageHandlerOptions {
   storage: ExtensionSettingsStorage;
   runner: BackgroundTranslationRunner;
   timeoutMs?: number;
+  hasProviderPermission?: (settings: ExtensionSettings) => Promise<boolean>;
 }
 
 export interface RuntimeMessageEvent {
@@ -41,10 +44,6 @@ export interface RuntimeMessageEvent {
 export const DEFAULT_BACKGROUND_TIMEOUT_MS = 5000;
 
 class OperationTimeoutError extends Error {}
-
-function describeError(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -150,11 +149,11 @@ export function createBackgroundMessageHandler(
     let settings: ExtensionSettings;
     try {
       settings = await loadSettings(options.storage);
-    } catch (error) {
+    } catch {
       return createFailure(
         request,
         'settings-failure',
-        `Settings could not be loaded: ${describeError(error)}`
+        'Settings could not be loaded.'
       );
     }
 
@@ -162,10 +161,31 @@ export function createBackgroundMessageHandler(
       return createFailure(request, 'disabled', 'Translation is disabled.');
     }
 
+    if (options.hasProviderPermission !== undefined) {
+      let hasPermission = false;
+      try {
+        hasPermission = await options.hasProviderPermission(settings);
+      } catch {
+        hasPermission = false;
+      }
+      if (!hasPermission) {
+        return createFailure(
+          request,
+          'provider-failure',
+          'The configured provider host permission is missing.'
+        );
+      }
+    }
+
     let result: BackgroundTranslationResult;
     try {
       result = await withTimeout(
-        options.runner.translate(request.texts, request.purpose, settings),
+        options.runner.translate(
+          request.texts,
+          request.purpose,
+          settings,
+          request.context ?? 'comment'
+        ),
         timeoutMs
       );
     } catch (error) {
@@ -174,7 +194,9 @@ export function createBackgroundMessageHandler(
         error instanceof OperationTimeoutError
           ? 'provider-timeout'
           : 'provider-failure',
-        describeError(error)
+        error instanceof OperationTimeoutError
+          ? 'Background translation timed out.'
+          : 'The translation request failed.'
       );
     }
 

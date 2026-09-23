@@ -15,6 +15,71 @@
       "category": "stage"
     },
     {
+      "term": "Playoffs",
+      "target": "季后赛",
+      "keep_as_is": false,
+      "category": "stage"
+    },
+    {
+      "term": "Semifinal",
+      "target": "半决赛",
+      "keep_as_is": false,
+      "category": "stage"
+    },
+    {
+      "term": "Quarterfinal",
+      "target": "四分之一决赛",
+      "keep_as_is": false,
+      "category": "stage"
+    },
+    {
+      "term": "Group Stage",
+      "target": "小组赛",
+      "keep_as_is": false,
+      "category": "stage"
+    },
+    {
+      "term": "bo3",
+      "target": "bo3",
+      "keep_as_is": true,
+      "category": "format",
+      "note": "CS 常见赛制写法，保留原文以适应狭窄的 match-meta 栏位"
+    },
+    {
+      "term": "bo5",
+      "target": "bo5",
+      "keep_as_is": true,
+      "category": "format",
+      "note": "CS 常见赛制写法，保留原文以适应狭窄的 match-meta 栏位"
+    },
+    {
+      "term": "Live",
+      "target": "直播",
+      "keep_as_is": false,
+      "category": "status"
+    },
+    {
+      "term": "IEM Katowice",
+      "target": "IEM Katowice",
+      "keep_as_is": true,
+      "category": "event",
+      "note": "赛事品牌，保留英文"
+    },
+    {
+      "term": "BLAST Premier",
+      "target": "BLAST Premier",
+      "keep_as_is": true,
+      "category": "event",
+      "note": "赛事品牌，保留英文"
+    },
+    {
+      "term": "CCT",
+      "target": "CCT",
+      "keep_as_is": true,
+      "category": "event",
+      "note": "赛事品牌，保留英文"
+    },
+    {
       "term": "Fall",
       "target": "秋季",
       "keep_as_is": false,

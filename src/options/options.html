@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CS2 HLTV 中文翻译设置</title>
+    <link rel="stylesheet" href="/options.css" />
+  </head>
+  <body>
+    <main>
+      <h1>翻译设置</h1>
+      <p class="privacy-note">
+        API Key 仅保存在此浏览器的 browser.storage.local，不会同步到云端或发送给扩展开发者。翻译或测试连接时，扩展会将它发送给你配置的服务商。扩展只申请你配置域名的访问权限。
+      </p>
+
+      <form id="settings-form">
+        <label class="check-row">
+          <input id="enabled" type="checkbox" />
+          <span>启用翻译</span>
+        </label>
+
+        <label for="mode">显示模式</label>
+        <select id="mode">
+          <option value="A">模式 A：完全翻译</option>
+          <option value="B">模式 B：双语对照</option>
+        </select>
+
+        <label for="provider-preset">服务商预设</label>
+        <select id="provider-preset">
+          <option value="deepseek">DeepSeek</option>
+          <option value="openai">OpenAI</option>
+          <option value="custom">自定义</option>
+        </select>
+
+        <label for="base-url">baseURL</label>
+        <input id="base-url" type="url" autocomplete="url" spellcheck="false" required />
+
+        <label for="model">模型名</label>
+        <input id="model" type="text" autocomplete="off" required />
+
+        <label for="api-key">API Key</label>
+        <div class="password-row">
+          <input id="api-key" type="password" autocomplete="off" />
+          <button id="toggle-key" type="button" class="secondary">显示</button>
+        </div>
+
+        <label class="check-row json-mode">
+          <input id="json-output" type="checkbox" />
+          <span>使用 JSON 输出模式（推荐）</span>
+        </label>
+        <p class="field-help">
+          若服务商不支持 response_format 并因此报错，可取消勾选。关闭后扩展仍要求模型只输出 JSON。
+        </p>
+
+        <section class="permission-panel" aria-live="polite">
+          <strong>服务商域名权限</strong>
+          <p id="permission-status">正在检查权限…</p>
+          <button id="authorize" type="button" class="secondary" hidden>授权</button>
+        </section>
+
+        <div class="actions">
+          <button id="save" type="submit">保存</button>
+          <button id="test-connection" type="button" class="secondary">测试连接</button>
+          <button id="clear-cache" type="button" class="secondary">清空翻译缓存</button>
+        </div>
+      </form>
+
+      <p id="status" role="status" aria-live="polite"></p>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

@@ -2,7 +2,7 @@
 
 ## Scope
 
-B3a connects the content script to the background service worker without using a real provider. The background side uses an injectable fake provider whose successful output is `【译】<original>`. The fake provider has four testable modes: success, provider failure, invalid response, and a promise that never resolves. B3b will replace the provider factory; it will not change the content-side injection interface.
+B3a originally connected the content script to the background service worker with an injectable fake provider. The fake remains available for tests; production B3b now uses the OpenAI-compatible provider factory and preserves the content-side injection interface.
 
 No external provider request is made in B3a. The only runtime resource load is the packaged `dist/glossary.json` asset, which the background loads by extension URL and passes as text to `parseGlossaryJson`. The core layer does not read files, fetch resources, or import JSON modules.
 
@@ -12,11 +12,13 @@ The shared protocol is in `src/background/protocol.ts`.
 
 ```ts
 type TranslationPurpose = 'plain' | 'event-name';
+type TranslationContext = 'structured' | 'prose' | 'comment';
 
 interface TranslateRequest {
   type: 'hltv-zh-translate-request';
   requestId: string;
   purpose: TranslationPurpose;
+  context?: TranslationContext;
   texts: string[];
 }
 
@@ -49,7 +51,9 @@ type TranslateResponse =
     };
 ```
 
-One request contains one purpose and a `string[]` batch. A failure response always has the same number of strings as the request and uses the original strings. The content script treats a malformed response, a rejected message, no response, or a timeout as the same original-text fallback. Unknown messages are ignored by the background handler. API keys are not fields in either message type.
+One request contains one purpose, an optional classification context, and a `string[]` batch. The content runtime maps `match-event`, `match-stage`, `match-meta`, and `match-time` to `structured`; news title/body strategies to `prose`; and comment strategies to `comment`. The background defaults an omitted context to `comment`, so older callers preserve the conservative behavior. A failure response always has the same number of strings as the request and uses the original strings. The content script treats a malformed response, a rejected message, no response, or a timeout as the same original-text fallback. Unknown messages are ignored by the background handler. API keys are not fields in either message type.
+
+Before classification, the core applies deterministic glossary substitutions whenever glossary terms cover all letters in a controlled value. These exact terms do not reach the classifier or provider. This lets short match labels translate without weakening the conservative default for comments.
 
 The request/response codecs validate message shape before use. They do not throw for untrusted message data; an invalid request is ignored because there is no reliable request ID with which to construct a response.
 
@@ -80,21 +84,24 @@ The glossary deliberately belongs only to the background translation path. The d
 interface ExtensionSettings {
   enabled: boolean;
   mode: 'A' | 'B';
+  providerPreset: 'deepseek' | 'openai' | 'custom';
   baseURL: string;
   model: string;
   apiKey: string;
+  useJsonOutputMode: boolean;
 }
 ```
 
-The defaults are `enabled: true`, `mode: 'A'`, and empty strings for `baseURL`, `model`, and `apiKey`. `content.ts` uses the same exported mode default through `loadContentSettings`; it does not maintain a second independent default literal.
+The defaults are `enabled: true`, `mode: 'A'`, DeepSeek base URL `https://api.deepseek.com`, model `deepseek-chat`, an empty API key, and JSON output mode enabled. OpenAI defaults to `https://api.openai.com` and `gpt-4o-mini`; Custom uses a user-provided HTTPS base URL and model, or HTTP for `localhost`, `127.0.0.1`, or `[::1]` local models. `content.ts` reads the shared enabled/mode defaults through `loadContentSettings`; it does not maintain a second independent default literal.
 
-The background reads all settings from `browser.storage.local`. The content script reads only `enabled` and `mode`. The API key path is therefore:
+The background reads saved translation settings from `browser.storage.local`. The content script reads only `enabled` and `mode`. Translation API keys stay in the background settings/provider path. The options-page connection test reads the current form directly and sends its one test request from the options context; it does not put the key in a runtime message. The key is never read by the content settings loader, included in a message, written to a log, or placed in a test fixture.
 
 ```text
-browser.storage.local -> background settings loader -> provider factory
+browser.storage.local -> background settings loader -> translation provider
+options form -> one options-context connection-test request
 ```
 
-The key is never read by the content settings loader, included in a message, written to a log, or placed in a test fixture. B3a's fake provider ignores provider credentials. B3b will inject the real provider factory without moving the key across the content/background boundary.
+The API key is stored only in `browser.storage.local`, never in `browser.storage.sync`. Translation and connection-test requests send it to the configured provider in the authorization header. It is not sent to the extension developer. The options page states these facts and does not claim the key is never transmitted over a network.
 
 ## Timeout and failure policy
 
@@ -104,7 +111,9 @@ The background runner observes provider failures while using the existing core `
 
 ## Three cache layers and their intentional semantics
 
-The core `CacheStore` interface is unchanged. `src/background/cache-store.ts` adapts IndexedDB using database `cs2-hltv-zh-cache-v1` and object store `translations`, with records keyed by the core text hash. Reads that fail are reported and treated as misses. Writes that fail are reported but are best effort, so a completed translation remains usable.
+The core `CacheStore` interface is unchanged. `src/background/cache-store.ts` adapts IndexedDB using database `cs2-hltv-zh-cache-v1` and object store `translations`. B3b cache keys use `v2:<purpose>:<text hash>`, generated by `createTranslationCacheKey(text, purpose, hash)` in the core. Reads that fail are reported and treated as misses. Writes that fail are reported but are best effort, so a completed translation remains usable. The options page can clear the store and reports the committed number of deleted records.
+
+B3a records used bare text hashes. They remain in IndexedDB but are no longer read or automatically deleted. A text whose only record is in the old format is translated once again and written under its purpose-specific v2 key. This does not affect returned values, settings, permissions, or records already stored with v2 keys. The clear-cache action removes both formats.
 
 There are deliberately three distinct behaviors:
 
@@ -116,4 +125,6 @@ The third behavior is intentional, not a missing optimization: persistent storag
 
 ## Permissions and B3b boundary
 
-B3a does not add `host_permissions` and does not call a provider. When B3b selects a provider, the manifest must add only the provider's exact origin pattern, for example `https://api.example.com/*`, rather than a broad web-wide pattern. The API call will remain in the background service worker.
+B3a did not add host_permissions or call a provider. B3b keeps permissions: ["storage"], declares optional_host_permissions for HTTPS hosts plus only localhost, 127.0.0.1, and [::1] over HTTP, and requests one configured origin at runtime from the options page. HTTP is limited to loopback so local model traffic stays on the user's machine; external providers still require HTTPS. It does not add fixed host permissions or <all_urls>. Translation requests run in the background service worker after checking permission before each provider operation. The one-request connection test runs in the options page after checking the same exact origin. Its result uses a fixed enum and optional HTTP status only; it never contains raw provider text or settings, so a credential cannot leak through an unfamiliar error body. The background records missing saved-origin permission at startup and after removal events, never prompts for permission, and returns originals when permission is absent. The options page reacts to permission changes and offers the explicit repair action.
+
+The owner-approved and implemented B3b/B4 contract, including URL normalization, permission lifecycle, request body, full prompt, response validation, options behavior, and cache clearing, is in [b3b-provider-options-contract.md](./b3b-provider-options-contract.md). The approved contract records an explicit JSON output mode setting, an injectable provider temperature, and the approved interface-preserving core batching change.

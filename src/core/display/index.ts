@@ -1,7 +1,30 @@
 import { DISPLAY_SELECTORS, type SelectorDefinition, type SelectorId, type SelectorMatcher } from './selectors.ts';
+import type { TranslationContext } from '../../shared/translation-context.ts';
 
 export { DISPLAY_SELECTORS };
 export type { SelectorDefinition, SelectorId, SelectorMatcher };
+
+export function getTranslationContextForStrategyId(
+  strategyId: string
+): TranslationContext {
+  switch (strategyId) {
+    case 'match-event':
+    case 'match-stage':
+    case 'match-meta':
+    case 'match-time':
+    case 'match-teamname':
+      return 'structured';
+    case 'news-title':
+    case 'news-body':
+    case 'article-body':
+      return 'prose';
+    case 'comment':
+    case 'comment-body':
+    case 'forum-comment':
+    default:
+      return 'comment';
+  }
+}
 
 export type DisplayMode = 'A' | 'B';
 

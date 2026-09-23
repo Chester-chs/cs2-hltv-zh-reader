@@ -1,6 +1,6 @@
-import type { TranslationPurpose } from '../core/translate/index.ts';
+import type { TranslationContext, TranslationPurpose } from '../core/translate/index.ts';
 
-export type { TranslationPurpose };
+export type { TranslationContext, TranslationPurpose };
 
 export const TRANSLATE_REQUEST_TYPE = 'hltv-zh-translate-request' as const;
 export const TRANSLATE_RESPONSE_TYPE = 'hltv-zh-translate-response' as const;
@@ -16,6 +16,7 @@ export interface TranslateRequest {
   type: typeof TRANSLATE_REQUEST_TYPE;
   requestId: string;
   purpose: TranslationPurpose;
+  context?: TranslationContext;
   texts: string[];
 }
 
@@ -52,6 +53,10 @@ function isPurpose(value: unknown): value is TranslationPurpose {
   return value === 'plain' || value === 'event-name';
 }
 
+function isTranslationContext(value: unknown): value is TranslationContext {
+  return value === 'structured' || value === 'prose' || value === 'comment';
+}
+
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === 'string');
 }
@@ -73,6 +78,7 @@ export function encodeTranslateRequest(
     type: TRANSLATE_REQUEST_TYPE,
     requestId: request.requestId,
     purpose: request.purpose,
+    ...(request.context === undefined ? {} : { context: request.context }),
     texts: [...request.texts]
   };
 }
@@ -89,6 +95,7 @@ export function decodeTranslateRequest(
     typeof value.requestId !== 'string' ||
     value.requestId.length === 0 ||
     !isPurpose(value.purpose) ||
+    (value.context !== undefined && !isTranslationContext(value.context)) ||
     !isStringArray(value.texts)
   ) {
     return undefined;
@@ -98,6 +105,9 @@ export function decodeTranslateRequest(
     type: TRANSLATE_REQUEST_TYPE,
     requestId: value.requestId,
     purpose: value.purpose,
+    ...(value.context === undefined
+      ? {}
+      : { context: value.context as TranslationContext }),
     texts: [...value.texts]
   };
 }

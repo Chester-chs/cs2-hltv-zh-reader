@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "CS2 HLTV Chinese Reader",
   "version": "0.0.1",
-  "description": "A log-only browser extension scaffold for hltv.org pages.",
+  "description": "Translate eligible English text on HLTV pages into Chinese.",
   "background": {
     "scripts": ["background.js"],
     "service_worker": "background.js"
@@ -15,6 +15,16 @@
     }
   ],
   "permissions": ["storage"],
+  "optional_host_permissions": [
+    "https://*/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*",
+    "http://[::1]/*"
+  ],
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
   "browser_specific_settings": {
     "gecko": {
       "id": "cs2-hltv-zh-reader@chester-chs.github.io"

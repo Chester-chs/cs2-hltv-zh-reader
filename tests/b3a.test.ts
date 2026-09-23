@@ -47,6 +47,17 @@ import {
   type ContentSettingsStorage
 } from '../src/content/settings.ts';
 import { createBackgroundTranslationService } from '../src/content/background-translator.ts';
+import { applyContentSettingsChanges } from '../src/content/settings-sync.ts';
+import { DEFAULT_SETTINGS as SHARED_DEFAULT_SETTINGS } from '../src/shared/settings.ts';
+import { parseProviderBaseURL } from '../src/shared/provider-url.ts';
+import {
+  authorizeProviderOrigin,
+  getProviderPermissionStatus,
+  saveOptionsSettings
+} from '../src/options/settings-service.ts';
+import { testProviderConnection } from '../src/options/connection-test.ts';
+import { createBackgroundProviderFactory } from '../src/background/provider.ts';
+import { createProviderPermissionMonitor } from '../src/background/provider-permissions.ts';
 import {
   hashText,
   type TranslationProvider
@@ -81,6 +92,7 @@ test('translation message protocol round-trips batches and failure fallback', ()
     type: 'hltv-zh-translate-request',
     requestId: 'request-1',
     purpose: 'event-name',
+    context: 'structured',
     texts: ['A long event title']
   };
   const decodedRequest = decodeTranslateRequest(encodeTranslateRequest(request));
@@ -101,6 +113,35 @@ test('translation message protocol round-trips batches and failure fallback', ()
   const decodedFailure = decodeTranslateResponse(encodeTranslateResponse(failure));
   assert.deepEqual(decodedFailure, failure);
   assert.equal(decodeTranslateRequest({ type: 'unknown' }), undefined);
+});
+
+test('background handler forwards classification context and defaults missing context to comment', async () => {
+  const receivedContexts: Array<string | undefined> = [];
+  const handler = createBackgroundMessageHandler({
+    storage: createStorage({ ...DEFAULT_SETTINGS }),
+    runner: {
+      async translate(texts, _purpose, _settings, context) {
+        receivedContexts.push(context);
+        return { ok: true, translations: [...texts] };
+      }
+    }
+  });
+
+  await handler({
+    type: 'hltv-zh-translate-request',
+    requestId: 'structured-context',
+    purpose: 'plain',
+    context: 'structured',
+    texts: ['Grand Final']
+  });
+  await handler({
+    type: 'hltv-zh-translate-request',
+    requestId: 'default-context',
+    purpose: 'plain',
+    texts: ['Thank you']
+  });
+
+  assert.deepEqual(receivedContexts, ['structured', 'comment']);
 });
 
 test('background glossary loader consumes injected packaged text at runtime', async () => {
@@ -278,16 +319,548 @@ test('settings loader uses shared defaults and content reads only non-secret set
     }
   });
 
-  assert.deepEqual(full, values);
+  assert.deepEqual(full, {
+    ...values,
+    providerPreset: 'custom',
+    useJsonOutputMode: true
+  });
   assert.deepEqual(content, { enabled: false, mode: 'B' });
   assert.deepEqual(requestedKeys, ['enabled', 'mode']);
   assert.equal(DEFAULT_SETTINGS.mode, 'A');
+});
+
+test('content settings changes apply enabled and display mode without reloading the tab', async () => {
+  const events: string[] = [];
+  await applyContentSettingsChanges(
+    {
+      async setEnabled(value: boolean) { events.push(`enabled:${value}`); },
+      async setMode(value: 'A' | 'B') { events.push(`mode:${value}`); }
+    },
+    {
+      enabled: { newValue: false },
+      mode: { newValue: 'B' }
+    }
+  );
+
+  assert.deepEqual(events, ['enabled:false', 'mode:B']);
+});
+
+test('content background adapter transmits context and separates contextual session entries', async () => {
+  const sent: TranslateRequest[] = [];
+  const translator = createBackgroundTranslationService({
+    sendMessage(message) {
+      sent.push(message);
+      return Promise.resolve(successfulResponse(message));
+    }
+  });
+
+  assert.deepEqual(
+    await translator.translateWithContext(['Thank you'], 'structured', 'plain'),
+    ['【译】Thank you']
+  );
+  assert.deepEqual(
+    await translator.translateWithContext(['Thank you'], 'comment', 'plain'),
+    ['【译】Thank you']
+  );
+  assert.deepEqual(await translator.translate(['Thank you']), ['【译】Thank you']);
+
+  assert.deepEqual(sent.map(({ context }) => context), ['structured', 'comment']);
+});
+
+test('core background runner classifies with the supplied context and defaults to comment', async () => {
+  const values = new Map<string, string>();
+  let providerCalls = 0;
+  const runner = createCoreBackgroundTranslationRunner({
+    glossary: { version: 1, entries: [] },
+    cacheStore: {
+      async get(key) { return values.get(key); },
+      async set(key, value) { values.set(key, value); }
+    },
+    providerFactory: () => ({
+      async translate(request) {
+        providerCalls += 1;
+        return { ok: true, translations: request.texts.map(() => '谢谢') };
+      }
+    })
+  });
+
+  const defaultContext = await runner.translate(
+    ['Thank you'],
+    'plain',
+    DEFAULT_SETTINGS
+  );
+  const structured = await runner.translate(
+    ['Thank you'],
+    'plain',
+    DEFAULT_SETTINGS,
+    'structured'
+  );
+
+  assert.deepEqual(defaultContext, { ok: true, translations: ['Thank you'] });
+  assert.deepEqual(structured, { ok: true, translations: ['谢谢'] });
+  assert.equal(providerCalls, 1);
+});
+
+test('settings default to DeepSeek JSON mode and normalize saved preset options', async () => {
+  const defaults = await loadSettings(createStorage({}));
+  assert.deepEqual(DEFAULT_SETTINGS, {
+    enabled: true,
+    mode: 'A',
+    baseURL: 'https://api.deepseek.com',
+    model: 'deepseek-chat',
+    apiKey: '',
+    providerPreset: 'deepseek',
+    useJsonOutputMode: true
+  });
+  assert.deepEqual(defaults, DEFAULT_SETTINGS);
+
+  const openAI = await loadSettings(createStorage({
+    baseURL: 'https://api.openai.com',
+    model: 'gpt-4o-mini',
+    apiKey: ''
+  }));
+  assert.equal(openAI.providerPreset, 'openai');
+  assert.equal(openAI.useJsonOutputMode, true);
+
+  const custom = await loadSettings(createStorage({
+    baseURL: 'https://local.example',
+    model: 'local-model',
+    apiKey: '',
+    providerPreset: 'custom',
+    useJsonOutputMode: false
+  }));
+  assert.equal(custom.providerPreset, 'custom');
+  assert.equal(custom.useJsonOutputMode, false);
 });
 
 test('settings loader falls back to safe defaults for invalid values', async () => {
   const storage = createStorage({ enabled: 'yes', mode: 'C', apiKey: 42 });
   const settings = await loadSettings(storage);
   assert.deepEqual(settings, DEFAULT_SETTINGS);
+});
+
+test('background checks host permission before calling the translation runner', async () => {
+  let runnerCalls = 0;
+  let checkedBaseURL = '';
+  const request: TranslateRequest = {
+    type: 'hltv-zh-translate-request',
+    requestId: 'request-host-permission',
+    purpose: 'plain',
+    texts: ['A long English sentence that needs translation']
+  };
+  const handlerOptions = {
+    storage: createStorage({
+      ...DEFAULT_SETTINGS,
+      enabled: true,
+      baseURL: 'https://provider.example/gateway'
+    }),
+    runner: {
+      async translate(texts: string[]) {
+        runnerCalls += 1;
+        return { ok: true as const, translations: texts.map(() => '意外调用') };
+      }
+    },
+    async hasProviderPermission(settings: { baseURL: string }) {
+      checkedBaseURL = settings.baseURL;
+      return false;
+    }
+  };
+  const handler = createBackgroundMessageHandler(handlerOptions);
+
+  const response = decodeTranslateResponse(await handler(request));
+
+  assert.equal(checkedBaseURL, 'https://provider.example/gateway');
+  assert.equal(runnerCalls, 0);
+  assert.equal(response?.ok, false);
+  assert.deepEqual(response?.translations, request.texts);
+});
+
+test('startup and revocation monitor diagnoses missing saved-origin permission without prompting', async () => {
+  const diagnostics: Array<{ code: string; origin?: string }> = [];
+  let permissionChecks = 0;
+  let permissionPrompts = 0;
+  let removedListener:
+    | ((details: { origins?: string[] }) => void | Promise<void>)
+    | undefined;
+  let granted = false;
+  const permissions = {
+    async contains({ origins }: { origins: string[] }) {
+      permissionChecks += 1;
+      assert.deepEqual(origins, ['https://api.deepseek.com/*']);
+      return granted;
+    },
+    async request() {
+      permissionPrompts += 1;
+      return false;
+    },
+    onRemoved: {
+      addListener(listener: (details: { origins?: string[] }) => void) {
+        removedListener = listener;
+      }
+    }
+  };
+  const monitor = createProviderPermissionMonitor({
+    storage: createStorage({
+      ...DEFAULT_SETTINGS,
+      baseURL: 'https://api.deepseek.com'
+    }),
+    permissions,
+    onDiagnostic(diagnostic: { code: string; origin?: string }) {
+      diagnostics.push(diagnostic);
+    }
+  });
+  monitor.install();
+
+  assert.equal(await monitor.checkSavedSettings(), false);
+  assert.deepEqual(diagnostics, [{
+    code: 'provider-permission-missing',
+    origin: 'https://api.deepseek.com'
+  }]);
+  await removedListener?.({ origins: ['https://unrelated.example/*'] });
+  assert.equal(permissionChecks, 1);
+  assert.equal(diagnostics.length, 1);
+  granted = true;
+  await removedListener?.({ origins: ['https://api.deepseek.com/*'] });
+  granted = false;
+  await removedListener?.({ origins: ['https://api.deepseek.com/*'] });
+
+  assert.equal(permissionChecks, 3);
+  assert.equal(permissionPrompts, 0);
+  assert.equal(diagnostics.length, 2);
+  assert.deepEqual(diagnostics[1], {
+    code: 'provider-permission-missing',
+    origin: 'https://api.deepseek.com'
+  });
+});
+
+test('background provider factory forwards saved provider settings and injected timeout', async () => {
+  let receivedURL = '';
+  let receivedTimeout = 0;
+  let receivedBody: Record<string, unknown> | undefined;
+  const factory = createBackgroundProviderFactory({
+    timeoutMs: 4321,
+    transport: {
+      async send(request: { url: string; timeoutMs: number; body: string }) {
+        receivedURL = request.url;
+        receivedTimeout = request.timeoutMs;
+        receivedBody = JSON.parse(request.body) as Record<string, unknown>;
+        return {
+          status: 200,
+          async json() {
+            return { choices: [{ message: { content: '{"translations":["译文"]}' } }] };
+          }
+        };
+      }
+    }
+  });
+  const provider = factory({
+    ...SHARED_DEFAULT_SETTINGS,
+    providerPreset: 'custom',
+    baseURL: 'https://gateway.example/proxy/v1/',
+    model: 'gateway-model',
+    apiKey: '',
+    useJsonOutputMode: false
+  });
+  const result = await provider.translate({
+    texts: ['A full English sentence'],
+    purposes: ['plain'],
+    protectedFragments: [[]]
+  });
+
+  assert.deepEqual(result, { ok: true, translations: ['译文'] });
+  assert.equal(receivedURL, 'https://gateway.example/proxy/v1/chat/completions');
+  assert.equal(receivedTimeout, 4321);
+  assert.equal(receivedBody?.model, 'gateway-model');
+  assert.equal(Object.hasOwn(receivedBody ?? {}, 'response_format'), false);
+});
+
+test('options save requests one exact origin before writing settings', async () => {
+  const events: string[] = [];
+  let stored: Record<string, unknown> = { enabled: false };
+  const storage = {
+    async get() {
+      return { ...stored };
+    },
+    async set(values: Record<string, unknown>) {
+      events.push('storage.set');
+      stored = { ...values };
+    }
+  };
+  const permissions = {
+    async contains({ origins }: { origins: string[] }) {
+      events.push('permissions.contains');
+      assert.deepEqual(origins, ['https://provider.example/*']);
+      return false;
+    },
+    async request({ origins }: { origins: string[] }) {
+      events.push('permissions.request');
+      assert.deepEqual(origins, ['https://provider.example/*']);
+      return true;
+    }
+  };
+
+  const result = await saveOptionsSettings(
+    {
+      ...SHARED_DEFAULT_SETTINGS,
+      providerPreset: 'custom',
+      baseURL: 'https://provider.example/gateway/',
+      model: 'custom-model'
+    },
+    storage,
+    permissions
+  );
+
+  assert.deepEqual(events, [
+    'permissions.contains',
+    'permissions.request',
+    'storage.set'
+  ]);
+  assert.deepEqual(result, { ok: true, origin: 'https://provider.example' });
+  assert.equal(stored.baseURL, 'https://provider.example/gateway');
+});
+
+test('rejected host permission leaves existing settings untouched', async () => {
+  const previous = { enabled: false, apiKey: '' };
+  let stored: Record<string, unknown> = { ...previous };
+  let writes = 0;
+  const result = await saveOptionsSettings(
+    {
+      ...SHARED_DEFAULT_SETTINGS,
+      providerPreset: 'custom',
+      baseURL: 'https://provider.example',
+      model: 'custom-model'
+    },
+    {
+      async set(values: Record<string, unknown>) {
+        writes += 1;
+        stored = { ...values };
+      }
+    },
+    {
+      async contains() {
+        return false;
+      },
+      async request() {
+        return false;
+      }
+    }
+  );
+
+  assert.deepEqual(result, {
+    ok: false,
+    reason: 'permission-denied',
+    origin: 'https://provider.example'
+  });
+  assert.equal(writes, 0);
+  assert.deepEqual(stored, previous);
+});
+
+test('provider URL accepts loopback HTTP and preserves HTTPS behavior', () => {
+  assert.deepEqual(parseProviderBaseURL('http://localhost:11434'), {
+    origin: 'http://localhost:11434',
+    normalizedBaseURL: 'http://localhost:11434',
+    permissionPattern: 'http://localhost:11434/*',
+    endpoint: 'http://localhost:11434/v1/chat/completions'
+  });
+  assert.deepEqual(parseProviderBaseURL('http://127.0.0.1:1234'), {
+    origin: 'http://127.0.0.1:1234',
+    normalizedBaseURL: 'http://127.0.0.1:1234',
+    permissionPattern: 'http://127.0.0.1:1234/*',
+    endpoint: 'http://127.0.0.1:1234/v1/chat/completions'
+  });
+  assert.deepEqual(parseProviderBaseURL('http://[::1]:11434'), {
+    origin: 'http://[::1]:11434',
+    normalizedBaseURL: 'http://[::1]:11434',
+    permissionPattern: 'http://[::1]:11434/*',
+    endpoint: 'http://[::1]:11434/v1/chat/completions'
+  });
+  assert.equal(parseProviderBaseURL('http://evil.example.com'), undefined);
+  assert.deepEqual(parseProviderBaseURL('https://gateway.example/openai/v1/'), {
+    origin: 'https://gateway.example',
+    normalizedBaseURL: 'https://gateway.example/openai/v1',
+    permissionPattern: 'https://gateway.example/*',
+    endpoint: 'https://gateway.example/openai/v1/chat/completions'
+  });
+});
+
+test('invalid base URLs are rejected before permission request or save', async () => {
+  const invalidURLs = [
+    'http://provider.example',
+    'https://@provider.example',
+    'https://user@provider.example',
+    'https://provider.example/path?mode=test',
+    'https://provider.example/path#section'
+  ];
+  let permissionCalls = 0;
+  let writes = 0;
+  for (const baseURL of invalidURLs) {
+    const result = await saveOptionsSettings(
+      {
+        ...SHARED_DEFAULT_SETTINGS,
+        providerPreset: 'custom',
+        baseURL,
+        model: 'custom-model'
+      },
+      {
+        async set() {
+          writes += 1;
+        }
+      },
+      {
+        async contains() {
+          permissionCalls += 1;
+          return false;
+        },
+        async request() {
+          permissionCalls += 1;
+          return true;
+        }
+      }
+    );
+
+    assert.deepEqual(result, { ok: false, reason: 'invalid-base-url' });
+  }
+  assert.equal(permissionCalls, 0);
+  assert.equal(writes, 0);
+});
+
+test('permission status and repair request use only the parsed current origin', async () => {
+  const requestedOrigins: string[][] = [];
+  const permissions = {
+    async contains({ origins }: { origins: string[] }) {
+      assert.deepEqual(origins, ['https://gateway.example/*']);
+      return false;
+    },
+    async request({ origins }: { origins: string[] }) {
+      requestedOrigins.push(origins);
+      return true;
+    }
+  };
+
+  assert.deepEqual(
+    await getProviderPermissionStatus(
+      'https://gateway.example/proxy/v1/',
+      permissions
+    ),
+    { state: 'missing', origin: 'https://gateway.example' }
+  );
+  assert.deepEqual(
+    await authorizeProviderOrigin(
+      'https://gateway.example/proxy/v1/',
+      permissions
+    ),
+    { state: 'granted', origin: 'https://gateway.example' }
+  );
+  assert.deepEqual(requestedOrigins, [['https://gateway.example/*']]);
+});
+
+test('connection test makes one minimal request and reports only a safe result', async () => {
+  const requests: Array<{ url: string; body: string }> = [];
+  let permissionChecks = 0;
+  const result = await testProviderConnection(
+    { ...SHARED_DEFAULT_SETTINGS, apiKey: '' },
+    {
+      async contains({ origins }: { origins: string[] }) {
+        permissionChecks += 1;
+        assert.deepEqual(origins, ['https://api.deepseek.com/*']);
+        return true;
+      }
+    },
+    {
+      async send(request: { url: string; body: string }) {
+        requests.push({ url: request.url, body: request.body });
+        return {
+          status: 200,
+          async json() {
+            return { choices: [{ message: { content: '{"translations":["你好"]}' } }] };
+          }
+        };
+      }
+    }
+  );
+
+  assert.deepEqual(result, { ok: true });
+  assert.equal(permissionChecks, 1);
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0]?.url, 'https://api.deepseek.com/v1/chat/completions');
+  assert.match(requests[0]?.body ?? '', /Hello\./);
+});
+
+test('connection test guides response_format failures to the JSON output setting', async () => {
+  let requests = 0;
+  const result = await testProviderConnection(
+    { ...SHARED_DEFAULT_SETTINGS, apiKey: '' },
+    { async contains() { return true; } },
+    {
+      async send() {
+        requests += 1;
+        return {
+          status: 400,
+          async json() { return { error: { message: 'response_format rejected' } }; }
+        };
+      }
+    }
+  );
+
+  assert.deepEqual(result, { ok: false, reason: 'response-format-unsupported' });
+  assert.equal(requests, 1);
+});
+
+test('connection test distinguishes missing permission, timeout, unauthorized, and network failure', async () => {
+  let requests = 0;
+  const settings = { ...SHARED_DEFAULT_SETTINGS, apiKey: '' };
+  const denied = await testProviderConnection(
+    settings,
+    { async contains() { return false; } },
+    { async send() { requests += 1; throw new Error('unreachable'); } },
+    2
+  );
+  const timedOut = await testProviderConnection(
+    settings,
+    { async contains() { return true; } },
+    { async send() { requests += 1; return new Promise(() => {}); } },
+    2
+  );
+  const unauthorized = await testProviderConnection(
+    settings,
+    { async contains() { return true; } },
+    { async send() {
+      requests += 1;
+      return { status: 401, async json() { return { error: { message: 'unauthorized' } }; } };
+    } },
+    2
+  );
+  const network = await testProviderConnection(
+    settings,
+    { async contains() { return true; } },
+    { async send() { requests += 1; throw new Error('network unavailable'); } },
+    2
+  );
+
+  assert.deepEqual(denied, { ok: false, reason: 'permission' });
+  assert.deepEqual(timedOut, { ok: false, reason: 'timeout' });
+  assert.deepEqual(unauthorized, { ok: false, reason: 'unauthorized', status: 401 });
+  assert.deepEqual(network, { ok: false, reason: 'network' });
+  assert.equal(requests, 3);
+});
+
+test('cache clearing reports the number of removed IndexedDB entries', async () => {
+  const cacheStoreModule = await import('../src/background/cache-store.ts');
+  const cache = cacheStoreModule.createCacheStoreFromBackend({
+    async get() { return undefined; },
+    async set() {},
+    async clear() { return 7; }
+  });
+
+  assert.equal(
+    typeof (cache as unknown as { clear?: () => Promise<number> }).clear,
+    'function',
+    'the IndexedDB cache adapter must expose a counted clear operation'
+  );
+  assert.equal(
+    await (cache as unknown as { clear: () => Promise<number> }).clear(),
+    7
+  );
 });
 
 test('background handler reports settings read failure as an original-text fallback', async () => {
@@ -342,7 +915,7 @@ test('background cache hit still receives one message but does not call the prov
   let providerCalls = 0;
   const cache = {
     async get(key: string) {
-      return key === hashText(original) ? cached : undefined;
+      return key === `v2:plain:${hashText(original)}` ? cached : undefined;
     },
     async set() {
       // The cache-hit path must not write.
@@ -446,7 +1019,7 @@ test('core background runner exposes fake provider failures as original-text res
     translations: [original],
     error: {
       code: 'provider-failure',
-      message: 'The B3a fake provider failed.'
+      message: 'Network request failed.'
     }
   });
   assert.deepEqual(invalid, {
@@ -454,7 +1027,39 @@ test('core background runner exposes fake provider failures as original-text res
     translations: [original],
     error: {
       code: 'invalid-response',
-      message: 'The B3a fake provider returned an invalid response.'
+      message: 'Provider returned an invalid response.'
     }
   });
+});
+
+test('core background runner replaces raw provider error detail with a safe description', async () => {
+  const runner = createCoreBackgroundTranslationRunner({
+    glossary: { version: 1, entries: [] },
+    cacheStore: {
+      async get() { return undefined; },
+      async set() {}
+    },
+    providerFactory: () => ({
+      async translate() {
+        return {
+          ok: false as const,
+          error: {
+            code: 'transport-error' as const,
+            message: 'private provider response detail'
+          }
+        };
+      }
+    })
+  });
+  const result = await runner.translate(
+    ['A long English sentence'],
+    'plain',
+    DEFAULT_SETTINGS
+  );
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.message, 'Network request failed.');
+    assert.equal(result.error.message.includes('private provider response detail'), false);
+  }
 });

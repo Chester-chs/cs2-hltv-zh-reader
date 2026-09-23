@@ -156,3 +156,31 @@ Status: implementation complete for owner review; no real provider is connected 
 ## Documentation lesson
 
 > PROGRESS.md 曾出现文档漂移：记录了已完成的提交为待批准状态，导致后续会话误判进度。今后每个 Gate 完成时，必须在同一次操作中更新 PROGRESS.md 并核对 git log 的真实输出。
+
+## Gate 5 B3b and B4 implementation
+
+Status: implementation and automated verification are complete, and the owner has passed local-model end-to-end validation and approved staging, commit, and push.
+
+- Added the real OpenAI-compatible background provider using the shared core `createOpenAICompatibleProvider`, with DeepSeek/OpenAI defaults, injected timeout and temperature, strict JSON response parsing, per-item validation, and original-text failure fallback.
+- Added exact-origin optional permission checks at options save, background startup, each translation request, and permission removal. The background never prompts. The options page reports missing permission and provides an explicit repair action.
+- Added an HTTP exception only for `localhost`, `127.0.0.1`, and `[::1]` so local model servers can be used without allowing external HTTP hosts. The manifest declares only those loopback HTTP patterns in addition to HTTPS; parser tests cover localhost, IPv4/IPv6 loopback, external HTTP rejection, and unchanged HTTPS behavior.
+- Added the plain HTML/CSS/TypeScript options page, local settings storage, preset selection, JSON output mode switch, safe one-request connection test, and counted IndexedDB cache clearing. Existing tabs apply enabled/mode changes from `browser.storage.onChanged` without reload.
+- Recorded the approved interface-preserving core batching change and its four regression tests. The public `TranslationService` signatures remain unchanged.
+- Cache identity now comes from `createTranslationCacheKey(text, purpose, hash)` with format `v2:<purpose>:<text hash>`. Existing B3a bare-hash records remain inert until cache clearing; texts with only an old record are translated once under the new format, with no effect on settings, permissions, returned values, or valid v2 records.
+- Updated `README.md`, `docs/background-integration.md`, `docs/translation-layer.md`, and `docs/b3b-provider-options-contract.md` to reflect the implemented behavior and cache-key migration.
+- Strict TDD was used for the batching, permission guard/revocation, provider factory, connection test, cache clear, live settings updates, empty-userinfo URL rejection, and loopback HTTP URL parsing. Each targeted RED test was observed before its corresponding implementation and then passed.
+- `ConnectionTestResult` remains a fixed discriminated union of safe reason values and optional HTTP status. It never carries raw provider text or settings, which prevents key disclosure through the result structure instead of relying on string redaction; this is documented in the provider contract.
+- Automated verification output and build artifact checks are reported with the implementation handoff. No files have been staged or committed. The reviewed repository HEAD remains `a563a70 feat: add background translation integration`; current `git log -5` was checked during this implementation.
+
+## Classification context repair
+
+Status: implementation, automated verification, and owner-provided local fake-provider end-to-end validation are complete; commit and push are authorized.
+
+- Added context-aware classification while keeping the default `comment` context conservative. Match event/stage/meta/time strategies pass `structured`, prose strategies pass `prose`, and comment strategies pass `comment`.
+- Added deterministic pre-classification glossary substitution for fully covered controlled values. `bo3` and `bo5` remain unchanged because players recognize them and the 28 px `.match-meta` field cannot fit expanded labels reliably.
+- Added regression coverage for real match labels, no provider call for glossary-covered values, conservative UGC comments, context-independent numbers/dates/symbols/Chinese, and the display `never` strategy for team names.
+- Verification passed: `pnpm.cmd typecheck` (exit 0); `pnpm.cmd test` (95 passed, 0 failed, 0 skipped); `pnpm.cmd build` (all background/content/options builds succeeded); dependency direction (`node --test tests/translate-dependencies.test.ts`, 1 passed). The built distribution contains manifest, glossary, background/content/options JS, options HTML/CSS, no bare import/export statements in bundles, and valid options resource references.
+- Owner-provided browser end-to-end verification passed with a local OpenAI-compatible fake server at `127.0.0.1:8788`: loopback permission grant and settings save succeeded; Mode B inserted 374 translation nodes, and all 14/14 event names rendered. Never-translate counts were team names 212/0, times 369/0, live scores 28/0, and livescore 14/0 (total / containing Chinese). Translations were the next sibling of the original text under `text-ellipsis`. The observer remained stable at 374 nodes for six seconds. Disabling the extension removed all translation nodes and restored the page.
+- Owner-provided classifier checks on real page text showed structured eligible values increasing from 2/27 to 17/23; comment values remained 8/8 untranslated; Chinese 0/3 and number/symbol values 0/6 were translated. `bo3` and `bo5` matched glossary `keep_as_is` and bypassed both classifier and provider.
+- One document-width measurement read 1521 against a 1425 viewport. Four controlled reproductions measured 1425 with zero overflowing elements; the same disabled state produced inconsistent 1425 and 1521 readings, while translation-enabled readings were normal. The owner attributes this measurement noise to HLTV lazy loading rather than the extension. Future manual verification uses the count of overflowing extension container elements as the layout criterion, not document width.
+- The owner has authorized explicit-path staging, commit, and push. No files have been staged yet.

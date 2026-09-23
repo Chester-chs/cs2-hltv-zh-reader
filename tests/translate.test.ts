@@ -14,7 +14,7 @@ const { test } = (await import(nodeTestModuleName)) as {
   test(name: string, callback: () => void | Promise<void>): void;
 };
 
-import { classifyText, createOpenAICompatibleProvider, createTranslationService, findKeepAsIsMatches, hashText, isEntirelyKeepAsIs, lookupEntries, parseGlossaryJson, validateTranslation, type CacheStore, type ChatCompletionsTransport, type ChatCompletionsTransportRequest, type GlossaryDocument, type ProviderRequest, type ProviderResult, type TranslationProvider } from '../src/core/translate/index.ts';
+import { classifyText, createOpenAICompatibleProvider, createTranslationService, findKeepAsIsMatches, hashText, isEntirelyKeepAsIs, lookupEntries, parseGlossaryJson, validateTranslation, type CacheStore, type ChatCompletionsTransport, type ChatCompletionsTransportRequest, type GlossaryDocument, type ProviderRequest, type ProviderResult, type TranslationContext, type TranslationProvider } from '../src/core/translate/index.ts';
 
 const glossary: GlossaryDocument = {
   version: 1,
@@ -42,6 +42,54 @@ const glossary: GlossaryDocument = {
       target: '总决赛',
       keep_as_is: false,
       category: 'stage'
+    },
+    {
+      term: 'Playoffs',
+      target: '季后赛',
+      keep_as_is: false,
+      category: 'stage'
+    },
+    {
+      term: 'Semifinal',
+      target: '半决赛',
+      keep_as_is: false,
+      category: 'stage'
+    },
+    {
+      term: 'Quarterfinal',
+      target: '四分之一决赛',
+      keep_as_is: false,
+      category: 'stage'
+    },
+    {
+      term: 'Group Stage',
+      target: '小组赛',
+      keep_as_is: false,
+      category: 'stage'
+    },
+    {
+      term: 'bo3',
+      target: 'bo3',
+      keep_as_is: true,
+      category: 'format'
+    },
+    {
+      term: 'bo5',
+      target: 'bo5',
+      keep_as_is: true,
+      category: 'format'
+    },
+    {
+      term: 'Live',
+      target: '直播',
+      keep_as_is: false,
+      category: 'status'
+    },
+    {
+      term: 'IEM Katowice',
+      target: 'IEM Katowice',
+      keep_as_is: true,
+      category: 'event'
     },
     {
       term: 'Fall',
@@ -108,6 +156,18 @@ function createService(
   cacheStore: CacheStore = createMemoryCache()
 ) {
   return createTranslationService({ glossary, provider, cacheStore });
+}
+
+async function loadProductionGlossary(): Promise<GlossaryDocument> {
+  const fsPromisesModuleName = 'node:fs/promises';
+  const { readFile } = (await import(fsPromisesModuleName)) as {
+    readFile(path: URL, encoding: 'utf8'): Promise<string>;
+  };
+  const loaded = parseGlossaryJson(
+    await readFile(new URL('../glossary.json', import.meta.url), 'utf8')
+  );
+  assert.deepEqual(loaded.diagnostics, []);
+  return loaded.glossary;
 }
 
 function openAIConfig(
@@ -218,6 +278,117 @@ test('classifyText protects deterministic values, Chinese, and keep-as-is names'
   );
 });
 
+test('structured context classifies short English page labels as translatable', () => {
+  const samples = [
+    'Grand Final',
+    'Playoffs',
+    'Semifinal',
+    'Quarterfinal',
+    'Live',
+    'Group Stage',
+    'IEM Katowice 2026',
+    'StarLadder StarSeries Fall 2026',
+    'Stake Pulse Beat II',
+    'Upper Bracket Final'
+  ];
+
+  for (const sample of samples) {
+    const decision = classifyText(sample, glossary, 'structured');
+    assert.equal(decision.shouldTranslate, true, sample);
+    assert.equal(decision.kind, 'translatable', sample);
+  }
+});
+
+test('prose uses a medium threshold while comments keep the conservative default', () => {
+  assert.equal(classifyText('Thank you', glossary, 'prose').shouldTranslate, true);
+  assert.equal(classifyText('Thank you', glossary, 'comment').shouldTranslate, false);
+  assert.deepEqual(
+    classifyText('Thank you', glossary),
+    classifyText('Thank you', glossary, 'comment')
+  );
+
+  for (const sample of ['lol 4', 'bot ☠', '1v9?? gl', 'Thank you <3']) {
+    const decision = classifyText(sample, glossary, 'comment');
+    assert.equal(decision.shouldTranslate, false, sample);
+  }
+});
+
+test('pure numbers, dates, symbols, and Chinese stay untranslated in every context', () => {
+  const contexts: TranslationContext[] = ['structured', 'prose', 'comment'];
+  const protectedValues = [
+    '12345',
+    '2026-09-20',
+    'September 20, 2026',
+    '20 September 2026',
+    'Sep 2026',
+    '🔥?!',
+    '这是中文句子',
+    '中文 text'
+  ];
+
+  for (const context of contexts) {
+    for (const sample of protectedValues) {
+      assert.equal(
+        classifyText(sample, glossary, context).shouldTranslate,
+        false,
+        `${context}: ${sample}`
+      );
+    }
+  }
+
+  assert.equal(
+    classifyText('Aurora', { version: 1, entries: [] }, 'structured')
+      .shouldTranslate,
+    true,
+    'the display strategy, not the language classifier, excludes team names'
+  );
+});
+
+test('real page glossary values translate deterministically without classification or provider calls', async () => {
+  const productionGlossary = await loadProductionGlossary();
+  const { provider, requests } = createMockProvider(async () => ({
+    ok: true,
+    translations: []
+  }));
+  const uncertain: string[] = [];
+  const service = createTranslationService({
+    glossary: productionGlossary,
+    provider,
+    cacheStore: createMemoryCache(),
+    context: 'structured',
+    onUncertainClassification(record) {
+      uncertain.push(record.text);
+    }
+  });
+  const input = [
+    'Grand Final',
+    'Playoffs',
+    'Semifinal',
+    'Quarterfinal',
+    'bo3',
+    'bo5',
+    'Live',
+    'Group Stage',
+    'IEM Katowice 2026',
+    'StarLadder StarSeries Fall 2026'
+  ];
+
+  assert.deepEqual(await service.translate(input), [
+    '总决赛',
+    '季后赛',
+    '半决赛',
+    '四分之一决赛',
+    'bo3',
+    'bo5',
+    '直播',
+    '小组赛',
+    'IEM Katowice 2026',
+    'StarLadder StarSeries 秋季 2026'
+  ]);
+  assert.deepEqual(requests, []);
+  assert.deepEqual(uncertain, []);
+});
+
 test('real short comment samples use the conservative uncertain path', () => {
   const samples = [
     'Congratulations mouz',
@@ -271,7 +442,7 @@ test('identical concurrent text requests call the provider once', async () => {
 
 test('cache hit returns the cached value without calling the provider', async () => {
   const source = 'This is a full English sentence';
-  const cache = createMemoryCache(new Map([[hashText(source), '缓存译文']]));
+  const cache = createMemoryCache(new Map([[`v2:plain:${hashText(source)}`, '缓存译文']]));
   const { provider, requests } = createMockProvider(async () => ({
     ok: true,
     translations: ['不应调用']
@@ -339,7 +510,15 @@ test('OpenAI-compatible provider lists protected fragments in its prompt', async
     async send(request) {
       requests.push(request);
       return responseWithPayload({
-        choices: [{ message: { content: JSON.stringify(['译文']) } }]
+        choices: [{
+          message: {
+            content: [
+              String.fromCharCode(96).repeat(3) + 'json',
+              JSON.stringify({ translations: ['译文'] }),
+              String.fromCharCode(96).repeat(3)
+            ].join('\n')
+          }
+        }]
       });
     }
   };
@@ -354,6 +533,115 @@ test('OpenAI-compatible provider lists protected fragments in its prompt', async
   assert.deepEqual(result, { ok: true, translations: ['译文'] });
   assert.equal(requests.length, 1);
   assert.match(requests[0]?.body ?? '', /StarLadder StarSeries/);
+  assert.equal(requests[0]?.url, 'https://provider.invalid/v1/chat/completions');
+  const body = JSON.parse(requests[0]?.body ?? '{}') as {
+    temperature: number;
+    response_format?: { type: string };
+    messages: Array<{ role: string; content: string }>;
+  };
+  assert.equal(body.temperature, 0.2);
+  assert.deepEqual(body.response_format, { type: 'json_object' });
+  assert.match(body.messages[0]?.content ?? '', /简体中文/);
+  const userInput = JSON.parse(body.messages[1]?.content ?? '{}') as {
+    items: Array<{
+      index: number;
+      purpose: string;
+      text: string;
+      protected_fragments: string[];
+    }>;
+  };
+  assert.deepEqual(userInput.items[0], {
+    index: 1,
+    purpose: 'event-name',
+    text: 'StarLadder StarSeries Fall 2026',
+    protected_fragments: ['StarLadder StarSeries']
+  });
+});
+
+test('provider adds v1 after a host or custom path prefix without duplicating it', async () => {
+  const urls: string[] = [];
+  const transport: ChatCompletionsTransport = {
+    async send(request) {
+      urls.push(request.url);
+      return responseWithPayload({
+        choices: [{ message: { content: JSON.stringify({ translations: ['译文'] }) } }]
+      });
+    }
+  };
+  const request: ProviderRequest = {
+    texts: ['This is a full English sentence'],
+    protectedFragments: [[]],
+    purposes: ['plain']
+  };
+  const cases: Array<[string, string]> = [
+    ['https://provider.invalid', 'https://provider.invalid/v1/chat/completions'],
+    ['https://gateway.invalid/openai/', 'https://gateway.invalid/openai/v1/chat/completions'],
+    ['https://gateway.invalid/openai/v1/', 'https://gateway.invalid/openai/v1/chat/completions']
+  ];
+
+  for (const [baseURL] of cases) {
+    await createOpenAICompatibleProvider({
+      ...openAIConfig(transport),
+      baseURL
+    }).translate(request);
+  }
+
+  assert.deepEqual(urls, cases.map(([, expectedURL]) => expectedURL));
+});
+
+test('provider config can disable response_format and override temperature', async () => {
+  let sentBody: Record<string, unknown> | undefined;
+  const transport: ChatCompletionsTransport = {
+    async send(request) {
+      sentBody = JSON.parse(request.body) as Record<string, unknown>;
+      return responseWithPayload({
+        choices: [{ message: { content: JSON.stringify({ translations: ['译文'] }) } }]
+      });
+    }
+  };
+  const provider = createOpenAICompatibleProvider({
+    ...openAIConfig(transport),
+    useJsonOutputMode: false,
+    temperature: 0.1
+  });
+
+  await provider.translate({
+    texts: ['This is a full English sentence'],
+    protectedFragments: [[]],
+    purposes: ['plain']
+  });
+
+  assert.equal(sentBody?.temperature, 0.1);
+  assert.equal(Object.hasOwn(sentBody ?? {}, 'response_format'), false);
+  const messages = sentBody?.messages as Array<{ role: string; content: string }>;
+  assert.match(messages[0]?.content ?? '', /合法 JSON/);
+});
+
+test('provider reports response_format rejection without retrying or exposing body text', async () => {
+  let attempts = 0;
+  const transport: ChatCompletionsTransport = {
+    async send() {
+      attempts += 1;
+      return responseWithPayload({
+        error: { message: 'response_format rejected with private detail' }
+      }, 400);
+    }
+  };
+  const provider = createOpenAICompatibleProvider(openAIConfig(transport));
+
+  const result = await provider.translate({
+    texts: ['This is a full English sentence'],
+    protectedFragments: [[]],
+    purposes: ['plain']
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.status, 400);
+    assert.match(result.error.message, /response_format/);
+    assert.equal(result.error.message.includes('private detail'), false);
+  }
+  assert.equal(attempts, 1);
 });
 
 test('protected fragment validation failure falls back to the original event name', async () => {
@@ -362,7 +650,7 @@ test('protected fragment validation failure falls back to the original event nam
     translations: ['2026 秋季赛']
   }));
   const service = createService(provider);
-  const source = 'StarLadder StarSeries Fall 2026';
+  const source = 'StarLadder StarSeries Fall 2026 championship event';
 
   assert.deepEqual(await service.translateEventNames([source]), [source]);
 });
@@ -384,7 +672,7 @@ test('event-name mode rejects a translation missing a glossary target', async ()
     translations: ['StarLadder StarSeries 2026']
   }));
   const service = createService(provider);
-  const source = 'StarLadder StarSeries Fall 2026';
+  const source = 'StarLadder StarSeries Fall 2026 championship event';
 
   assert.deepEqual(await service.translateEventNames([source]), [source]);
 });
@@ -473,4 +761,125 @@ test('team names, player IDs, and ambiguous labels follow the conservative path'
   const input = ['Aurora', 'kyxsan', 'BO3'];
   assert.deepEqual(await service.translate(input), input);
   assert.equal(requests.length, 0);
+});
+
+test('one translation call batches every distinct uncached translatable text', async () => {
+  const input = [
+    'This is the first full English sentence for batching',
+    'This is another full English sentence for batching',
+    'This third English sentence contains enough words'
+  ];
+  const { provider, requests } = createMockProvider(async (request) => ({
+    ok: true,
+    translations: request.texts.map((_, index) => `译文 ${index + 1}`)
+  }));
+  const service = createService(provider);
+
+  const result = await service.translate(input);
+
+  assert.deepEqual(result, ['译文 1', '译文 2', '译文 3']);
+  assert.equal(requests.length, 1);
+  assert.deepEqual(requests[0]?.texts, input);
+});
+
+test('cache hits are returned without entering the provider batch', async () => {
+  const cachedText = 'This full English sentence already has a cached result';
+  const uncachedText = 'This other full English sentence needs translation';
+  const cache = createMemoryCache(new Map([
+    [`v2:plain:${hashText(cachedText)}`, '缓存译文']
+  ]));
+  const { provider, requests } = createMockProvider(async (request) => ({
+    ok: true,
+    translations: request.texts.map(() => '新译文')
+  }));
+  const service = createService(provider, cache);
+
+  const result = await service.translate([cachedText, uncachedText]);
+
+  assert.deepEqual(result, ['缓存译文', '新译文']);
+  assert.equal(requests.length, 1);
+  assert.deepEqual(requests[0]?.texts, [uncachedText]);
+});
+
+test('one event validation failure preserves valid translations in the same batch', async () => {
+  const validText = 'StarLadder StarSeries Fall championship event';
+  const invalidText = 'StarLadder StarSeries Summer championship event';
+  const validTranslation = '秋季赛事 StarLadder StarSeries';
+  const { provider, requests } = createMockProvider(async (request) => ({
+    ok: true,
+    translations: request.texts.map((text) =>
+      text === validText ? validTranslation : '夏季赛事'
+    )
+  }));
+  const service = createService(provider);
+
+  const result = await service.translateEventNames([validText, invalidText]);
+
+  assert.deepEqual(result, [validTranslation, invalidText]);
+  assert.equal(requests.length, 1);
+  assert.deepEqual(requests[0]?.texts, [validText, invalidText]);
+});
+
+test('overlapping concurrent batches share in-flight translations', async () => {
+  const sharedText = 'This full English sentence appears in concurrent batches';
+  const secondText = 'Another complete English sentence joins the first batch';
+  let releaseProvider: (() => void) | undefined;
+  let markProviderStarted: (() => void) | undefined;
+  const providerStarted = new Promise<void>((resolve) => {
+    markProviderStarted = resolve;
+  });
+  const providerGate = new Promise<void>((resolve) => {
+    releaseProvider = resolve;
+  });
+  const { provider, requests } = createMockProvider(async (request) => {
+    markProviderStarted?.();
+    await providerGate;
+    return { ok: true, translations: request.texts.map(() => '译文') };
+  });
+  const service = createService(provider);
+
+  const firstCall = service.translate([sharedText, secondText]);
+  await providerStarted;
+  const secondCall = service.translate([sharedText]);
+  releaseProvider?.();
+  const [first, second] = await Promise.all([firstCall, secondCall]);
+
+  assert.deepEqual(first, ['译文', '译文']);
+  assert.deepEqual(second, ['译文']);
+  assert.equal(requests.length, 1);
+  assert.deepEqual(requests[0]?.texts, [sharedText, secondText]);
+});
+
+test('legacy text-only cache entries are orphaned and purpose caches stay separate', async () => {
+  const source = 'StarLadder StarSeries Fall championship event';
+  const legacyKey = hashText(source);
+  const legacyValue = 'old cached plain result';
+  const values = new Map([[legacyKey, legacyValue]]);
+  const writes: string[] = [];
+  const cache: CacheStore = {
+    async get(key) {
+      return values.get(key);
+    },
+    async set(key, value) {
+      writes.push(key);
+      values.set(key, value);
+    }
+  };
+  const { provider, requests } = createMockProvider(async (request) => ({
+    ok: true,
+    translations: request.purposes.map((purpose) =>
+      purpose === 'plain'
+        ? 'Plain event result StarLadder StarSeries'
+        : '秋季赛事 StarLadder StarSeries'
+    )
+  }));
+  const service = createService(provider, cache);
+
+  const result = await service.translateEventNames([source]);
+
+  assert.deepEqual(result, ['秋季赛事 StarLadder StarSeries']);
+  assert.equal(requests.length, 1);
+  assert.deepEqual(requests[0]?.purposes, ['event-name']);
+  assert.equal(values.get(legacyKey), legacyValue);
+  assert.deepEqual(writes, [`v2:event-name:${hashText(source)}`]);
 });

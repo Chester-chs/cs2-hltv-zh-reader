@@ -1,8 +1,11 @@
 import {
   DEFAULT_SETTINGS,
+  PROVIDER_PRESETS,
   type DisplayMode,
-  type ExtensionSettings
+  type ExtensionSettings,
+  type ProviderPreset
 } from '../shared/settings.ts';
+import { parseProviderBaseURL } from '../shared/provider-url.ts';
 
 export interface ExtensionSettingsStorage {
   get(keys: readonly string[] | null): Promise<Record<string, unknown>>;
@@ -21,13 +24,49 @@ function readString(value: unknown, fallback: string): string {
   return typeof value === 'string' ? value : fallback;
 }
 
+function resolveProviderPreset(
+  value: unknown,
+  baseURL: string
+): ProviderPreset {
+  if (value === 'deepseek' || value === 'openai' || value === 'custom') {
+    return value;
+  }
+
+  const normalizedBaseURL =
+    parseProviderBaseURL(baseURL)?.normalizedBaseURL;
+  if (normalizedBaseURL === PROVIDER_PRESETS.deepseek.baseURL) {
+    return 'deepseek';
+  }
+  if (normalizedBaseURL === PROVIDER_PRESETS.openai.baseURL) {
+    return 'openai';
+  }
+  return 'custom';
+}
+
 function normalizeSettings(values: Record<string, unknown>): ExtensionSettings {
+  const storedBaseURL = readString(
+    values.baseURL,
+    DEFAULT_SETTINGS.baseURL
+  );
+  const baseURL =
+    storedBaseURL.trim().length === 0
+      ? DEFAULT_SETTINGS.baseURL
+      : storedBaseURL;
+  const storedModel = readString(values.model, DEFAULT_SETTINGS.model);
+  const model =
+    storedModel.trim().length === 0 ? DEFAULT_SETTINGS.model : storedModel;
+
   return {
     enabled: readBoolean(values.enabled, DEFAULT_SETTINGS.enabled),
     mode: readMode(values.mode),
-    baseURL: readString(values.baseURL, DEFAULT_SETTINGS.baseURL),
-    model: readString(values.model, DEFAULT_SETTINGS.model),
-    apiKey: readString(values.apiKey, DEFAULT_SETTINGS.apiKey)
+    providerPreset: resolveProviderPreset(values.providerPreset, baseURL),
+    baseURL,
+    model,
+    apiKey: readString(values.apiKey, DEFAULT_SETTINGS.apiKey),
+    useJsonOutputMode: readBoolean(
+      values.useJsonOutputMode,
+      DEFAULT_SETTINGS.useJsonOutputMode
+    )
   };
 }
 

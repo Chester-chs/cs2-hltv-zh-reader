@@ -13,7 +13,7 @@ const { test } = (await import(nodeTestModuleName)) as {
   test(name: string, callback: () => void | Promise<void>): void;
 };
 
-import { DISPLAY_SELECTORS, ELEMENT_STRATEGIES, createDisplayRecordTable, decideRenderIntent, resolveElementStrategy, type DisplayElementInfo, type DisplayNodeInfo, type ElementStrategy } from '../src/core/display/index.ts';
+import { DISPLAY_SELECTORS, ELEMENT_STRATEGIES, createDisplayRecordTable, decideRenderIntent, getTranslationContextForStrategyId, resolveElementStrategy, type DisplayElementInfo, type DisplayNodeInfo, type ElementStrategy } from '../src/core/display/index.ts';
 
 function element(
   classes: readonly string[] = [],
@@ -33,6 +33,21 @@ function node(key: string, parent: DisplayElementInfo): DisplayNodeInfo {
 function getStrategy(classes: readonly string[], attributes = {}) {
   return resolveElementStrategy(element(classes, attributes));
 }
+
+test('element strategy IDs select structured, prose, and comment classification contexts', () => {
+  for (const strategyId of [
+    'match-event',
+    'match-stage',
+    'match-meta',
+    'match-time'
+  ]) {
+    assert.equal(getTranslationContextForStrategyId(strategyId), 'structured');
+  }
+  assert.equal(getTranslationContextForStrategyId('news-title'), 'prose');
+  assert.equal(getTranslationContextForStrategyId('news-body'), 'prose');
+  assert.equal(getTranslationContextForStrategyId('comment'), 'comment');
+  assert.equal(getTranslationContextForStrategyId('unknown'), 'comment');
+});
 
 test('selector definitions are centralized and carry matches-page evidence', () => {
   const expectedSelectors = [

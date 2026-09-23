@@ -1,6 +1,5 @@
 import browser from 'webextension-polyfill';
 import { createIndexedDbCacheStore } from './background/cache-store.ts';
-import { createFakeProvider } from './background/fake-provider.ts';
 import { loadPackagedGlossary } from './background/glossary-loader.ts';
 import {
   createBackgroundMessageHandler,
@@ -8,6 +7,8 @@ import {
 } from './background/translation-handler.ts';
 import { createCoreBackgroundTranslationRunner } from './background/translation-engine.ts';
 import type { ExtensionSettingsStorage } from './background/settings.ts';
+import { createProviderPermissionMonitor } from './background/provider-permissions.ts';
+import { createBackgroundProviderFactory } from './background/provider.ts';
 
 const { version } = browser.runtime.getManifest();
 
@@ -30,13 +31,27 @@ const glossary = loadPackagedGlossary(
 const runner = createCoreBackgroundTranslationRunner({
   glossary,
   cacheStore,
-  // B3a deliberately uses a local fake. B3b replaces only this factory.
-  providerFactory: () => createFakeProvider()
+  providerFactory: createBackgroundProviderFactory()
 });
+
+const providerPermissionMonitor = createProviderPermissionMonitor({
+  storage: browser.storage.local as unknown as ExtensionSettingsStorage,
+  permissions: browser.permissions,
+  onDiagnostic(diagnostic) {
+    console.warn(
+      '[cs2-hltv-zh] provider permission diagnostic',
+      diagnostic.code,
+      diagnostic.origin
+    );
+  }
+});
+providerPermissionMonitor.install();
+void providerPermissionMonitor.checkSavedSettings();
 
 const messageHandler = createBackgroundMessageHandler({
   storage: browser.storage.local as unknown as ExtensionSettingsStorage,
-  runner
+  runner,
+  hasProviderPermission: providerPermissionMonitor.hasProviderPermission
 });
 
 installBackgroundMessageHandler(
