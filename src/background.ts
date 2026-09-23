@@ -36,8 +36,13 @@ const runner = createCoreBackgroundTranslationRunner({
 
 const providerPermissionMonitor = createProviderPermissionMonitor({
   storage: browser.storage.local as unknown as ExtensionSettingsStorage,
+  storageChanges: browser.storage.onChanged,
   permissions: browser.permissions,
   onDiagnostic(diagnostic) {
+    if (diagnostic === undefined) {
+      console.info('[cs2-hltv-zh] provider permission diagnostic cleared');
+      return;
+    }
     console.warn(
       '[cs2-hltv-zh] provider permission diagnostic',
       diagnostic.code,

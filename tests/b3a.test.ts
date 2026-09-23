@@ -191,11 +191,13 @@ test('content translator does not send a second message for a same-session hit',
   assert.equal(messageCount, 1);
 });
 
-test('content translator turns a provider failure response into original text', async () => {
+test('content translator returns provider failures as originals and retries them later', async () => {
+  let requests = 0;
   const translator = createBackgroundTranslationService({
     timeoutMs: 20,
-    sendMessage: async (message) =>
-      encodeTranslateResponse({
+    sendMessage: async (message) => {
+      requests += 1;
+      return encodeTranslateResponse(requests === 1 ? {
         type: 'hltv-zh-translate-response',
         requestId: message.requestId,
         purpose: message.purpose,
@@ -206,12 +208,17 @@ test('content translator turns a provider failure response into original text', 
           fallback: 'original',
           message: 'fake provider failed'
         }
-      })
+      } : successfulResponse(message));
+    }
   });
 
   assert.deepEqual(await translator.translate(['A long English sentence']), [
     'A long English sentence'
   ]);
+  assert.deepEqual(await translator.translate(['A long English sentence']), [
+    '【译】A long English sentence'
+  ]);
+  assert.equal(requests, 2);
 });
 
 test('content translator falls back when background does not respond before timeout', async () => {
@@ -334,7 +341,8 @@ test('content settings changes apply enabled and display mode without reloading 
   await applyContentSettingsChanges(
     {
       async setEnabled(value: boolean) { events.push(`enabled:${value}`); },
-      async setMode(value: 'A' | 'B') { events.push(`mode:${value}`); }
+      async setMode(value: 'A' | 'B') { events.push(`mode:${value}`); },
+      async requestScan() { events.push('scan'); }
     },
     {
       enabled: { newValue: false },
@@ -475,62 +483,125 @@ test('background checks host permission before calling the translation runner', 
   assert.deepEqual(response?.translations, request.texts);
 });
 
-test('startup and revocation monitor diagnoses missing saved-origin permission without prompting', async () => {
-  const diagnostics: Array<{ code: string; origin?: string }> = [];
-  let permissionChecks = 0;
-  let permissionPrompts = 0;
+test('provider permission diagnostics follow startup, settings, grant, and revocation state', async () => {
+  const diagnostics: Array<{ code: string; origin?: string } | undefined> = [];
+  const permissionChecks: string[] = [];
+  const grantedOrigins = new Set<string>();
+  let addedListener:
+    | ((details: { origins?: string[] }) => void | Promise<void>)
+    | undefined;
   let removedListener:
     | ((details: { origins?: string[] }) => void | Promise<void>)
     | undefined;
-  let granted = false;
+  let storageListener:
+    | ((changes: Record<string, unknown>, areaName: string) => void | Promise<void>)
+    | undefined;
+  let permissionPrompts = 0;
+  const values: Record<string, unknown> = { ...DEFAULT_SETTINGS };
+  const storage = createStorage(values);
   const permissions = {
     async contains({ origins }: { origins: string[] }) {
-      permissionChecks += 1;
-      assert.deepEqual(origins, ['https://api.deepseek.com/*']);
-      return granted;
+      permissionChecks.push(origins[0] ?? '');
+      return grantedOrigins.has(origins[0] ?? '');
     },
     async request() {
       permissionPrompts += 1;
       return false;
     },
+    onAdded: {
+      addListener(listener: (details: { origins?: string[] }) => void | Promise<void>) {
+        addedListener = listener;
+      }
+    },
     onRemoved: {
-      addListener(listener: (details: { origins?: string[] }) => void) {
+      addListener(listener: (details: { origins?: string[] }) => void | Promise<void>) {
         removedListener = listener;
       }
     }
   };
   const monitor = createProviderPermissionMonitor({
-    storage: createStorage({
-      ...DEFAULT_SETTINGS,
-      baseURL: 'https://api.deepseek.com'
-    }),
+    storage,
+    storageChanges: {
+      addListener(listener) {
+        storageListener = listener;
+      }
+    },
     permissions,
-    onDiagnostic(diagnostic: { code: string; origin?: string }) {
+    onDiagnostic(diagnostic: { code: string; origin?: string } | undefined) {
       diagnostics.push(diagnostic);
     }
   });
   monitor.install();
 
   assert.equal(await monitor.checkSavedSettings(), false);
+  assert.equal(await monitor.checkSavedSettings(), false);
   assert.deepEqual(diagnostics, [{
     code: 'provider-permission-missing',
     origin: 'https://api.deepseek.com'
   }]);
-  await removedListener?.({ origins: ['https://unrelated.example/*'] });
-  assert.equal(permissionChecks, 1);
-  assert.equal(diagnostics.length, 1);
-  granted = true;
-  await removedListener?.({ origins: ['https://api.deepseek.com/*'] });
-  granted = false;
-  await removedListener?.({ origins: ['https://api.deepseek.com/*'] });
+  assert.deepEqual(permissionChecks, [
+    'https://api.deepseek.com/*',
+    'https://api.deepseek.com/*'
+  ]);
 
-  assert.equal(permissionChecks, 3);
-  assert.equal(permissionPrompts, 0);
+  let runnerCalls = 0;
+  const handler = createBackgroundMessageHandler({
+    storage,
+    hasProviderPermission: monitor.hasProviderPermission,
+    runner: {
+      async translate(texts) {
+        runnerCalls += 1;
+        return { ok: true, translations: texts.map((text) => `译:${text}`) };
+      }
+    }
+  });
+  const request: TranslateRequest = {
+    type: 'hltv-zh-translate-request',
+    requestId: 'permission-lifecycle',
+    purpose: 'plain',
+    texts: ['A long sentence']
+  };
+  let response = decodeTranslateResponse(await handler(request));
+  assert.equal(response?.ok, false);
+  assert.equal(runnerCalls, 0);
+
+  const configuredOrigin = 'https://provider.example/*';
+  grantedOrigins.add(configuredOrigin);
+  await addedListener?.({ origins: [configuredOrigin] });
+  await storage.set({
+    ...DEFAULT_SETTINGS,
+    providerPreset: 'custom',
+    baseURL: 'https://provider.example/v1'
+  });
+  await storageListener?.({
+    baseURL: { oldValue: 'https://api.deepseek.com', newValue: 'https://provider.example/v1' }
+  }, 'local');
+
   assert.equal(diagnostics.length, 2);
-  assert.deepEqual(diagnostics[1], {
+  assert.deepEqual(diagnostics[0], {
     code: 'provider-permission-missing',
     origin: 'https://api.deepseek.com'
   });
+  assert.equal(diagnostics[1], undefined);
+  response = decodeTranslateResponse(await handler(request));
+  assert.equal(response?.ok, true);
+  assert.equal(runnerCalls, 1);
+
+  grantedOrigins.delete(configuredOrigin);
+  await removedListener?.({ origins: [configuredOrigin] });
+  await removedListener?.({ origins: [configuredOrigin] });
+
+  assert.equal(diagnostics.length, 3);
+  assert.deepEqual(diagnostics[0], {
+    code: 'provider-permission-missing',
+    origin: 'https://api.deepseek.com'
+  });
+  assert.equal(diagnostics[1], undefined);
+  assert.deepEqual(diagnostics[2], {
+    code: 'provider-permission-missing',
+    origin: 'https://provider.example'
+  });
+  assert.equal(permissionPrompts, 0);
 });
 
 test('background provider factory forwards saved provider settings and injected timeout', async () => {

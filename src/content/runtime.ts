@@ -20,7 +20,18 @@ export type ContentTranslator = Pick<
     context: TranslationContext,
     purpose: TranslationPurpose
   ) => Promise<string[]>;
+  clearSessionCache?: () => void;
 };
+
+export interface ContentScanOptions {
+  retryFailedTranslations?: boolean;
+  refreshTranslations?: boolean;
+  reapplyRecords?: boolean;
+}
+
+export interface ContentRuntimeSetterOptions {
+  rescan?: boolean;
+}
 
 export type ContentDiagnosticCode =
   | 'register-rejected'
@@ -55,8 +66,15 @@ export interface ContentRuntimeOptions {
 
 export interface ContentRuntime {
   start(): Promise<void>;
-  setEnabled(enabled: boolean): Promise<void>;
-  setMode(mode: DisplayMode): Promise<void>;
+  setEnabled(
+    enabled: boolean,
+    options?: ContentRuntimeSetterOptions
+  ): Promise<void>;
+  setMode(
+    mode: DisplayMode,
+    options?: ContentRuntimeSetterOptions
+  ): Promise<void>;
+  requestScan(options?: ContentScanOptions): Promise<void>;
   stats(): ContentRuntimeStats;
 }
 
@@ -203,7 +221,10 @@ class ContentRuntimeImpl implements ContentRuntime {
     }
   }
 
-  async setEnabled(enabled: boolean): Promise<void> {
+  async setEnabled(
+    enabled: boolean,
+    options: ContentRuntimeSetterOptions = {}
+  ): Promise<void> {
     if (this.enabled === enabled && this.started) {
       return;
     }
@@ -228,18 +249,25 @@ class ContentRuntimeImpl implements ContentRuntime {
     }
 
     this.observe();
-    await this.requestScan();
+    if (options.rescan !== false) {
+      await this.requestScan({ retryFailedTranslations: true });
+    }
   }
 
-  async setMode(mode: DisplayMode): Promise<void> {
+  async setMode(
+    mode: DisplayMode,
+    options: ContentRuntimeSetterOptions = {}
+  ): Promise<void> {
+    const changed = this.mode !== mode;
     this.mode = mode;
-    if (!this.started || !this.enabled) {
+    if (!this.started || !this.enabled || options.rescan === false) {
       return;
     }
 
-    for (const record of this.records.entries()) {
-      await this.applyRecord(record.node.key);
-    }
+    await this.requestScan({
+      retryFailedTranslations: true,
+      reapplyRecords: changed
+    });
   }
 
   stats(): ContentRuntimeStats {
@@ -274,9 +302,40 @@ class ContentRuntimeImpl implements ContentRuntime {
     return key;
   }
 
-  private async requestScan(): Promise<void> {
+  async requestScan(options: ContentScanOptions = {}): Promise<void> {
+    if (!this.started || !this.enabled) {
+      if (options.refreshTranslations) {
+        this.translator.clearSessionCache?.();
+      }
+      return;
+    }
+
     this.scanChain = this.scanChain
-      .then(() => this.scan())
+      .then(async () => {
+        if (!this.enabled) {
+          return;
+        }
+
+        if (options.refreshTranslations) {
+          this.translator.clearSessionCache?.();
+        }
+        if (options.refreshTranslations || options.retryFailedTranslations) {
+          for (const record of this.records.entries()) {
+            if (
+              record.strategy.translation === 'allowed' &&
+              (options.refreshTranslations || record.translated === record.original)
+            ) {
+              this.records.updateTranslation(record.node.key, undefined);
+            }
+          }
+        }
+        if (options.reapplyRecords) {
+          for (const record of this.records.entries()) {
+            await this.applyRecord(record.node.key);
+          }
+        }
+        await this.scan();
+      })
       .catch((error: unknown) => {
         this.report({
           code: 'observer-error',
@@ -332,6 +391,18 @@ class ContentRuntimeImpl implements ContentRuntime {
               code: 'original-mismatch',
               key,
               message: 'The page changed the original text; this node was not retranslated.'
+            });
+          }
+          if (
+            existing.translated === undefined &&
+            existing.strategy.translation === 'allowed' &&
+            (textNode.data === existing.original || this.markedTextNodes.has(textNode))
+          ) {
+            pending.push({
+              key,
+              strategyId: existing.strategy.id,
+              original: existing.original,
+              context: getTranslationContextForStrategyId(existing.strategy.id)
             });
           }
           continue;

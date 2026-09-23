@@ -86,13 +86,17 @@ The options page checks permission whenever the selected preset or edited base U
 
 The API key is never written to browser.storage.sync, a runtime message, or a log. It is stored in browser.storage.local and sent as an Authorization Bearer header to the configured provider when a translation or connection test is made. It is not sent to the extension developer. The page must describe this accurately; it must not claim that the key is never sent over the network.
 
-### Startup and revocation handling
+### Startup, settings, grant, and revocation handling
 
-At background startup, load the saved settings, parse the saved base URL, and check its exact origin with browser.permissions.contains. If the saved origin has no permission, record a permission-missing diagnostic and do not request permission or call the provider.
+At background startup, load the saved settings, parse the saved base URL, and check its exact origin with browser.permissions.contains. If the saved origin has no permission, record a permission-missing diagnostic and do not request permission or call the provider. When the extension starts before the user configures it, this first check sees the default settings (currently `https://api.deepseek.com`), not the provider the user will later save. This ordering is expected and must be recovered through settings-change handling.
 
-Before every provider operation, check the saved origin permission again. If it is missing, return the B3a failure shape with ok:false and a copy of the complete original input array. Do not attempt a network request.
+Register browser.storage.onChanged and browser.permissions.onAdded/onRemoved in the background. For local settings changes, re-read the saved settings and check the exact saved origin. For permission changes, re-read the settings when the event concerns that origin and check it again. After options requests a permission, onAdded can run before the settings write; the later storage event checks the newly saved origin. Permission diagnostics are current state: repeated reports for the same code and origin are suppressed, a changed state is reported once, and a resolved diagnostic is cleared by calling the diagnostic sink with `undefined`.
 
-Register browser.permissions.onRemoved in the background. When a host permission is removed, re-read the saved origin and check whether it is now missing; if so, record the same diagnostic. This event path covers revocation from the browser extension management page. The next translation is independently blocked by the pre-request permission check, including when the background was not active at the instant the settings page was changed.
+Before every provider operation, check the saved origin permission again. If it is missing, return the B3a failure shape with ok:false and a copy of the complete original input array. Do not attempt a network request. The request-time guard remains in place if an event was missed or permission is revoked between checks.
+
+An already-open content script also needs to recover after options saves settings. It responds to enabled, mode, and provider-setting changes by scheduling a scan through its serialized scan queue. Provider-setting changes refresh translation records and the content-side session cache; prior failures can be requested again. A failed rescan returns the original text, does not throw, and does not schedule itself again. The scan reuses record keys and marked siblings so it does not register or insert duplicates.
+
+The onRemoved event covers revocation from the browser extension management page and restores the missing-permission diagnostic. The next translation is independently blocked by the pre-request permission check, including when the background was not active at the instant the setting was changed.
 
 The options page listens for permission additions and removals and refreshes the status for the currently selected origin. A missing permission is shown as “当前配置缺少权限” with an Authorize repair action. The status is based on browser.permissions.contains, not on a cached boolean.
 

@@ -18,6 +18,9 @@ import {
   type ContentTranslator
 } from '../src/content/runtime.ts';
 import { createStubTranslationService } from '../src/content/stub-translator.ts';
+import { encodeTranslateResponse } from '../src/background/protocol.ts';
+import { createBackgroundTranslationService } from '../src/content/background-translator.ts';
+import { applyContentSettingsChanges } from '../src/content/settings-sync.ts';
 import type { TranslationContext, TranslationPurpose } from '../src/core/translate/index.ts';
 
 type FakeNode = FakeElement | FakeText;
@@ -212,13 +215,15 @@ function makeRuntime(
   document: FakeDocument,
   translator: ContentTranslator,
   diagnostics: Array<{ code: string; message: string }>,
-  initialMode: 'A' | 'B' = 'A'
+  initialMode: 'A' | 'B' = 'A',
+  initialEnabled = true
 ): { runtime: ReturnType<typeof createContentRuntime>; observer: () => FakeObserver } {
   let observer: FakeObserver | undefined;
   const runtime = createContentRuntime({
     document: asDocument(document),
     translator,
     initialMode,
+    initialEnabled,
     observerFactory: (callback) => {
       observer = new FakeObserver(callback);
       return observer as unknown as MutationObserver;
@@ -442,6 +447,161 @@ test('mode switching reuses translations and disabling restores and clears the p
   assert.equal(runtime.stats().enabled, false);
   assert.equal(runtime.stats().processedNodes, 0);
   assert.equal(diagnostics.length, 0);
+});
+
+test('provider settings changes rescan failed nodes and insert one translated sibling', async () => {
+  const document = new FakeDocument();
+  const event = new FakeElement(document, 'div', ['match-event']);
+  const eventText = document.createTextNode('StarLadder StarSeries');
+  event.appendChild(eventText);
+  document.addCandidate('.match-event', event);
+
+  let requests = 0;
+  const translator = createBackgroundTranslationService({
+    sendMessage(message) {
+      requests += 1;
+      if (requests === 1) {
+        return Promise.resolve(encodeTranslateResponse({
+          type: 'hltv-zh-translate-response',
+          requestId: message.requestId,
+          purpose: message.purpose,
+          ok: false,
+          translations: message.texts,
+          error: {
+            code: 'provider-failure',
+            fallback: 'original',
+            message: 'Provider permission is missing.'
+          }
+        }));
+      }
+      return Promise.resolve(encodeTranslateResponse({
+        type: 'hltv-zh-translate-response',
+        requestId: message.requestId,
+        purpose: message.purpose,
+        ok: true,
+        translations: message.texts.map((text) => `译:${text}`)
+      }));
+    }
+  });
+  const diagnostics: Array<{ code: string; message: string }> = [];
+  const { runtime } = makeRuntime(document, translator, diagnostics, 'B');
+
+  await runtime.start();
+  assert.equal(eventText.data, 'StarLadder StarSeries');
+  assert.equal(event.childNodes.length, 1);
+  assert.equal(requests, 1);
+
+  await applyContentSettingsChanges(runtime, {
+    baseURL: { newValue: 'https://provider.example/v1' },
+    apiKey: { newValue: 'configured' }
+  });
+
+  assert.equal(requests, 2);
+  assert.equal(eventText.data, 'StarLadder StarSeries');
+  assert.equal(event.childNodes.length, 2);
+  assert.equal(
+    event.childNodes.filter(
+      (node) => node instanceof FakeElement && node.getAttribute('data-hltv-zh') === '1'
+    ).length,
+    1
+  );
+  assert.equal(runtime.stats().processedNodes, 1);
+  assert.equal(diagnostics.length, 0);
+});
+
+test('rapid provider settings changes stay serialized and do not duplicate translation nodes', async () => {
+  const document = new FakeDocument();
+  const event = new FakeElement(document, 'div', ['match-event']);
+  const eventText = document.createTextNode('StarLadder StarSeries');
+  event.appendChild(eventText);
+  document.addCandidate('.match-event', event);
+
+  let requests = 0;
+  const translator = createBackgroundTranslationService({
+    sendMessage(message) {
+      requests += 1;
+      return Promise.resolve(encodeTranslateResponse({
+        type: 'hltv-zh-translate-response',
+        requestId: message.requestId,
+        purpose: message.purpose,
+        ok: true,
+        translations: message.texts.map((text) => `译:${text}`)
+      }));
+    }
+  });
+  const { runtime } = makeRuntime(document, translator, [], 'B');
+  await runtime.start();
+
+  await Promise.all([
+    applyContentSettingsChanges(runtime, { baseURL: { newValue: 'https://one.example' } }),
+    applyContentSettingsChanges(runtime, { model: { newValue: 'model-two' } }),
+    applyContentSettingsChanges(runtime, { apiKey: { newValue: 'key-three' } })
+  ]);
+
+  assert.equal(requests, 4);
+  assert.equal(event.childNodes.length, 2);
+  assert.equal(
+    event.childNodes.filter(
+      (node) => node instanceof FakeElement && node.getAttribute('data-hltv-zh') === '1'
+    ).length,
+    1
+  );
+  assert.equal(runtime.stats().processedNodes, 1);
+});
+
+test('provider settings rescan failures safely and do not retry without another setting change', async () => {
+  const document = new FakeDocument();
+  const event = new FakeElement(document, 'div', ['match-event']);
+  const eventText = document.createTextNode('StarLadder StarSeries');
+  event.appendChild(eventText);
+  document.addCandidate('.match-event', event);
+
+  let requests = 0;
+  const translator = createBackgroundTranslationService({
+    sendMessage() {
+      requests += 1;
+      return Promise.reject(new Error('Permission is still missing.'));
+    }
+  });
+  const { runtime, observer } = makeRuntime(document, translator, [], 'B');
+  await runtime.start();
+
+  await applyContentSettingsChanges(runtime, {
+    baseURL: { newValue: 'https://provider.example/v1' }
+  });
+  await flushObserver();
+
+  assert.equal(requests, 2);
+  assert.equal(eventText.data, 'StarLadder StarSeries');
+  assert.equal(event.childNodes.length, 1);
+  assert.equal(runtime.stats().processedNodes, 1);
+  assert.equal(observer().observed, true);
+});
+
+test('disabled content runtime does not rescan after settings changes', async () => {
+  const document = new FakeDocument();
+  const event = new FakeElement(document, 'div', ['match-event']);
+  event.appendChild(document.createTextNode('StarLadder StarSeries'));
+  document.addCandidate('.match-event', event);
+
+  let requests = 0;
+  const translator = createBackgroundTranslationService({
+    sendMessage() {
+      requests += 1;
+      return Promise.reject(new Error('A disabled page must not request translation.'));
+    }
+  });
+  const { runtime } = makeRuntime(document, translator, [], 'A', false);
+  await runtime.start();
+
+  await applyContentSettingsChanges(runtime, {
+    enabled: { newValue: false },
+    baseURL: { newValue: 'https://provider.example/v1' }
+  });
+
+  assert.equal(requests, 0);
+  assert.equal(runtime.stats().processedNodes, 0);
+  assert.equal(event.childNodes.length, 1);
 });
 
 test('dynamic writer attributes never call the translator', async () => {

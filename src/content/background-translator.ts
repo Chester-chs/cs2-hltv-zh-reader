@@ -30,6 +30,10 @@ export interface ContextualTranslationAdapter {
   ): Promise<string[]>;
 }
 
+export interface RefreshableTranslationAdapter {
+  clearSessionCache(): void;
+}
+
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   return new Promise((resolve) => {
     let settled = false;
@@ -56,7 +60,9 @@ function defaultRequestIdFactory(): () => string {
 
 export function createBackgroundTranslationService(
   options: BackgroundTranslationServiceOptions
-): TranslationService & ContextualTranslationAdapter {
+): TranslationService &
+  ContextualTranslationAdapter &
+  RefreshableTranslationAdapter {
   const timeoutMs = options.timeoutMs ?? DEFAULT_CONTENT_TIMEOUT_MS;
   const requestId = options.requestId ?? defaultRequestIdFactory();
   const sessionResults = new Map<string, string>();
@@ -99,6 +105,7 @@ export function createBackgroundTranslationService(
     });
 
     let translated: string[] | undefined;
+    let cacheable = false;
     try {
       const response = await withTimeout(options.sendMessage(request), timeoutMs);
       const decoded = decodeTranslateResponse(response);
@@ -108,7 +115,12 @@ export function createBackgroundTranslationService(
         decoded.purpose === request.purpose &&
         decoded.translations.length === request.texts.length
       ) {
-        translated = decoded.ok ? decoded.translations : [...request.texts];
+        if (decoded.ok) {
+          translated = decoded.translations;
+          cacheable = true;
+        } else {
+          translated = [...request.texts];
+        }
       }
     } catch {
       translated = undefined;
@@ -118,7 +130,9 @@ export function createBackgroundTranslationService(
     for (let index = 0; index < missingEntries.length; index += 1) {
       const [sessionKey, indexes] = missingEntries[index] as [string, number[]];
       const value = resolved[index] as string;
-      sessionResults.set(sessionKey, value);
+      if (cacheable) {
+        sessionResults.set(sessionKey, value);
+      }
       for (const originalIndex of indexes) {
         results[originalIndex] = value;
       }
@@ -136,6 +150,9 @@ export function createBackgroundTranslationService(
     },
     translateWithContext(texts, context, purpose) {
       return translateBatch(texts, purpose, context);
+    },
+    clearSessionCache() {
+      sessionResults.clear();
     }
   };
 }
