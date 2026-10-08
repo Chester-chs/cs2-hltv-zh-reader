@@ -555,8 +555,9 @@ Status: manifest fix, regression coverage, build, distribution audit, and packag
 
 ## 1.0.0 — first GitHub release preparation (2026-10-08)
 
-Status: first-release documentation and version metadata are prepared in the working tree. The owner must approve the exact staged files before the first commit, then the commit can be pushed to `main` and tagged `v1.0.0`.
+Status: published to GitHub and pushed to `main`; future updates should continue from this tagged baseline.
 
 - Promoted the extension and package metadata to `1.0.0` for the first GitHub release without using `3.0` in the release or asset name.
-- Replaced the README with English and Chinese sections. The `English | 中文` links jump between the two GitHub-rendered language sections; GitHub README content cannot run custom JavaScript, so this is the supported click-to-switch pattern.
-- The release asset is `C:\Users\Chester\Downloads\CS2-HLTV-Chinese-Reader-v1.0.0.zip` (95,260 bytes, SHA-256 `0124D83A15DF2CFD493EF3E8EBD7E3BF7F97EEB76C839756D31E6D2CC8C03EC7`) and contains the validated MV3 service-worker build. The matching unpacked folder is `C:\Users\Chester\Downloads\CS2-HLTV-Chinese-Reader-v1.0.0`.
+- Replaced the README with `README.md` (English) and `README.zh-CN.md` (中文). Each page has an `English | 中文` link at the top, so only one language is shown at a time and one click switches between the two GitHub-rendered pages.
+- The published release asset is `CS2-HLTV-Chinese-Reader-v1.0.0.zip` (95,260 bytes, SHA-256 `0124D83A15DF2CFD493EF3E8EBD7E3BF7F97EEB76C839756D31E6D2CC8C03EC7`) and contains the validated MV3 service-worker build. The matching unpacked folder is `C:\Users\Chester\Downloads\CS2-HLTV-Chinese-Reader-v1.0.0`.
+- Published commit: `c93e74abed5cf4cfc4f5e5b0ca07f26b65573164`; tag and release: `v1.0.0` at `https://github.com/Chester-chs/cs2-hltv-zh-reader/releases/tag/v1.0.0`. The asset is uploaded and the remote `main` line matches the local commit.
