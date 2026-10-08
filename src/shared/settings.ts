@@ -1,5 +1,6 @@
 export type DisplayMode = 'A' | 'B';
 export type ProviderPreset = 'deepseek' | 'openai' | 'custom';
+export type ThemeMode = 'system' | 'light' | 'dark';
 
 export const PROVIDER_PRESETS = Object.freeze({
   deepseek: Object.freeze({
@@ -20,11 +21,17 @@ export interface ExtensionSettings {
   model: string;
   apiKey: string;
   useJsonOutputMode: boolean;
+  fallbackEnabled?: boolean;
+  fallbackBaseURL?: string;
+  fallbackModel?: string;
+  fallbackApiKey?: string;
 }
 
 export interface ContentSettings {
   enabled: boolean;
   mode: DisplayMode;
+  theme: ThemeMode;
+  fontScale: number;
 }
 
 export const DEFAULT_SETTINGS: ExtensionSettings = Object.freeze({
@@ -39,7 +46,9 @@ export const DEFAULT_SETTINGS: ExtensionSettings = Object.freeze({
 
 export const DEFAULT_CONTENT_SETTINGS: ContentSettings = Object.freeze({
   enabled: DEFAULT_SETTINGS.enabled,
-  mode: DEFAULT_SETTINGS.mode
+  mode: DEFAULT_SETTINGS.mode,
+  theme: 'system',
+  fontScale: 1
 });
 
-export const CONTENT_SETTING_KEYS = ['enabled', 'mode'] as const;
+export const CONTENT_SETTING_KEYS = ['enabled', 'mode', 'theme', 'fontScale'] as const;

@@ -13,14 +13,15 @@ const { test } = (await import(nodeTestModuleName)) as {
   test(name: string, callback: () => void | Promise<void>): void;
 };
 
-import { DISPLAY_SELECTORS, ELEMENT_STRATEGIES, createDisplayRecordTable, decideRenderIntent, getTranslationContextForStrategyId, resolveElementStrategy, type DisplayElementInfo, type DisplayNodeInfo, type ElementStrategy } from '../src/core/display/index.ts';
+import { DISPLAY_SELECTORS, ELEMENT_STRATEGIES, createDisplayRecordTable, decideRenderIntent, getTranslationContextForStrategyId, resolveElementStrategy, selectorMatchesPath, type DisplayElementInfo, type DisplayNodeInfo, type ElementStrategy } from '../src/core/display/index.ts';
 
 function element(
   classes: readonly string[] = [],
-  attributes: Readonly<Record<string, string>> = {}
+  attributes: Readonly<Record<string, string>> = {},
+  tagName = 'div'
 ): DisplayElementInfo {
   return {
-    tagName: 'div',
+    tagName,
     classes,
     attributes
   };
@@ -30,8 +31,13 @@ function node(key: string, parent: DisplayElementInfo): DisplayNodeInfo {
   return { key, parent };
 }
 
-function getStrategy(classes: readonly string[], attributes = {}) {
-  return resolveElementStrategy(element(classes, attributes));
+function getStrategy(
+  classes: readonly string[],
+  attributes = {},
+  tagName = 'div',
+  pathname?: string
+) {
+  return resolveElementStrategy(element(classes, attributes, tagName), pathname);
 }
 
 test('element strategy IDs select structured, prose, and comment classification contexts', () => {
@@ -39,17 +45,40 @@ test('element strategy IDs select structured, prose, and comment classification 
     'match-event',
     'match-stage',
     'match-meta',
-    'match-time'
+    'match-time',
+    'match-detail-heading',
+    'sidebar-widget-heading',
+    'player-week-category',
+    'player-week-metric',
+    'match-list-heading',
+    'match-filter-heading',
+    'match-filter-label',
+    'match-detail-stat-tab',
+    'global-navigation',
+    'events-current-heading',
+    'events-upcoming-heading',
+    'team-ranking-region-selector',
+    'static-page-heading',
+    'filter-panel-title',
+    'filter-label',
+    'fantasy-main-heading',
+    'fantasy-section-heading',
+    'live-fullscreen-control',
+    'live-theater-link'
   ]) {
     assert.equal(getTranslationContextForStrategyId(strategyId), 'structured');
   }
   assert.equal(getTranslationContextForStrategyId('news-title'), 'prose');
   assert.equal(getTranslationContextForStrategyId('news-body'), 'prose');
+  assert.equal(getTranslationContextForStrategyId('article-body'), 'prose');
+  assert.equal(getTranslationContextForStrategyId('news-index-heading'), 'prose');
+  assert.equal(getTranslationContextForStrategyId('news-article-title'), 'prose');
   assert.equal(getTranslationContextForStrategyId('comment'), 'comment');
+  assert.equal(getTranslationContextForStrategyId('comment-body'), 'comment');
   assert.equal(getTranslationContextForStrategyId('unknown'), 'comment');
 });
 
-test('selector definitions are centralized and carry matches-page evidence', () => {
+test('selector definitions are centralized and carry page-scoped evidence', () => {
   const expectedSelectors = [
     '.match-teamname',
     '.match-event',
@@ -59,19 +88,433 @@ test('selector definitions are centralized and carry matches-page evidence', () 
     '.current-map-score',
     '.match-team-livescore',
     '[data-time-format][data-unix]',
-    '[data-countdown-target-timestamp]'
+    '[data-countdown-target-timestamp]',
+    '.index .newsline.article .newstext',
+    '.newsdsl .newstext-con',
+    '.newsdsl .newstext-con [data-tooltip-id]',
+    '.forum .post .forum-middle',
+    '.index h2.newsheader',
+    '.match-page .betting-section .headline, .match-page .lineups > .headline, .match-page .past-matches-header > .headline, .match-page .matchpage-analytics-section > .headline',
+    '.navbar .navcon a.nav-link',
+    '.newsitem.standard-box > h1.headline',
+    '.leftCol > aside > h1:not(#playerOfTheWeekTitle), .leftCol > aside > .presented-by-row > h1, .rightCol > aside > h1, .right2Col > aside > .recent-activity > h1, .right2Col > aside > h1:not(.minigame-label-new)',
+    '.matches-v4 .new-standardPageGrid .upcoming-headline',
+    '.matches-v4 .matches-sidebar-filter-wrapper .sidebar-title > h3',
+    '.matches-v4 .matches-sidebar-filter-wrapper .matches-filter-star-section .matches-filter-name-text, .matches-v4 .matches-sidebar-filter-wrapper .matches-filter-ranked-section .matches-filter-name-text',
+    '.match-page .map-stats-infobox .map-stats-infobox-tabs > button.map-stats-infobox-tab',
+    '.event-status-headline',
+    '.event-status-upcoming-headline',
+    '.ranking-open-region-selector',
+    'h1:not(#playerOfTheWeekTitle):not(.minigame-label-new)',
+    '.header-filters-title',
+    '.filter-headline',
+    'h1',
+    'h2',
+    'button',
+    'a[href*="fullscreen=1"]',
+    '.footer .footer-content .footer-section-header',
+    '.footer .footer-content .footer-section-subtext',
+    '.footer .footer-content .footer-cta-button',
+    '.footer .footerlinks a.footerlink',
+    '.footer .footer-responsible-container .footer-generic-responible-container',
+    '.playerOfTheWeekCategory',
+    '.playerOfTheWeekTitle',
+    '.navsignin',
+    '.right2Col > aside > h1.minigame-label-new',
+    '.right2Col .sidebar-minigames-playnow-btn',
+    '.leftCol > aside > a.block.button.text-center[href="/ranking/teams"]',
+    '.leftCol > aside > a.block.button.text-center[href="/ranking/teams"] > span.normal-weight',
+    '.leftCol > aside > a.block.button.text-center[href="/events"]',
+    'body',
+    'body',
+    'body',
+    '.right2Col .activitylist > a.activity > span.topic',
+    'body',
+    '.navbar .navcon .dropdown-menu > li > a.dropdown-link:not([href^="/events/"]):not([href^="/fantasy/"]), .navbar .navcon .dropdown-menu > li > a.dropdown-link[href="/events/archive"]',
+    '.players-archive .players-archive-navigation > a.players-archive-tab'
   ];
 
+  assert.deepEqual(
+    DISPLAY_SELECTORS.map(({ selector, pageArea }) => [selector, pageArea]),
+    [
+      ...expectedSelectors.slice(0, 7).map((selector) => [selector, 'matches']),
+      [expectedSelectors[7], 'global'],
+      [expectedSelectors[8], 'global'],
+      [expectedSelectors[9], 'news-list'],
+      [expectedSelectors[10], 'article'],
+      [expectedSelectors[11], 'article'],
+      [expectedSelectors[12], 'match-comments'],
+      [expectedSelectors[13], 'news-index'],
+      [expectedSelectors[14], 'match-detail'],
+      [expectedSelectors[15], 'global-navigation'],
+      [expectedSelectors[16], 'article'],
+      [expectedSelectors[17], 'global-widgets'],
+      [expectedSelectors[18], 'matches'],
+      [expectedSelectors[19], 'matches'],
+      [expectedSelectors[20], 'matches'],
+      [expectedSelectors[21], 'match-detail'],
+      [expectedSelectors[22], 'events'],
+      [expectedSelectors[23], 'events'],
+      [expectedSelectors[24], 'team-ranking'],
+      [expectedSelectors[25], 'page-headings'],
+      [expectedSelectors[26], 'route-filters'],
+      [expectedSelectors[27], 'route-filters'],
+      [expectedSelectors[28], 'fantasy'],
+      [expectedSelectors[29], 'fantasy'],
+      [expectedSelectors[30], 'live'],
+      [expectedSelectors[31], 'live'],
+      [expectedSelectors[32], 'global-footer'],
+      [expectedSelectors[33], 'global-footer'],
+      [expectedSelectors[34], 'global-footer'],
+      [expectedSelectors[35], 'global-footer'],
+      [expectedSelectors[36], 'global-footer'],
+      [expectedSelectors[37], 'global-widgets'],
+      [expectedSelectors[38], 'global-widgets'],
+      [expectedSelectors[39], 'global-navigation'],
+      [expectedSelectors[40], 'global-widgets'],
+      [expectedSelectors[41], 'global-widgets'],
+      [expectedSelectors[42], 'global-widgets'],
+      [expectedSelectors[43], 'global-widgets'],
+      [expectedSelectors[44], 'global-widgets'],
+      [expectedSelectors[45], 'stats'],
+      [expectedSelectors[46], 'global'],
+      [expectedSelectors[47], 'global'],
+      [expectedSelectors[48], 'global-widgets'],
+      [expectedSelectors[49], 'global'],
+      [expectedSelectors[50], 'global-navigation'],
+      [expectedSelectors[51], 'global-navigation']
+    ]
+  );
   assert.deepEqual(
     DISPLAY_SELECTORS.map((definition) => definition.selector),
     expectedSelectors
   );
 
   for (const definition of DISPLAY_SELECTORS) {
-    assert.equal(definition.pageArea, 'matches');
-    assert.equal(definition.verifiedOn, '2026-09-20');
+    assert.equal(
+      definition.verifiedOn,
+      ['stats-fixed-ui', 'page-fixed-ui', 'page-prose', 'recent-activity-topic', 'profile-fixed-ui', 'navigation-dropdown', 'player-archive-filter'].includes(definition.id) ? '2026-09-30' :
+      definition.id === 'events-current-heading' ||
+        definition.id === 'events-upcoming-heading' ||
+        definition.id === 'team-ranking-region-selector' ||
+        definition.id === 'static-page-heading' ||
+        definition.id === 'filter-panel-title' ||
+        definition.id === 'filter-label' ||
+        definition.id === 'fantasy-main-heading' ||
+        definition.id === 'fantasy-section-heading' ||
+        definition.id === 'live-fullscreen-control' ||
+        definition.id === 'live-theater-link'
+        ? '2026-09-26'
+        : '2026-09-20'
+    );
     assert.equal(definition.evidence.length > 0, true);
   }
+});
+
+test('navigation and archive filters use scoped local glossary replacement', () => {
+  for (const [classes, pathname, id] of [
+    [['dropdown-link'], '/news/1/example', 'navigation-dropdown'],
+    [['players-archive-tab'], '/players/archive/active', 'player-archive-filter'],
+    [['players-archive-tab'], '/players/archive/retired', 'player-archive-filter']
+  ] as const) {
+    const strategy = getStrategy(classes, {}, 'a', pathname);
+    assert.equal(strategy.id, id);
+    assert.equal(strategy.translationSource, 'fixed-ui-glossary');
+    assert.deepEqual(strategy.glossaryCategories, ['ui', 'ui-navigation']);
+    assert.deepEqual(strategy.allowedModes, ['A']);
+    assert.equal(strategy.fallbackStrategyId, undefined);
+    assert.equal(getTranslationContextForStrategyId(id), 'structured');
+  }
+  assert.equal(getStrategy(['players-archive-tab'], {}, 'a', '/players/explore').translation, 'never');
+  assert.equal(getStrategy(['players-archive-tab'], {}, 'a', '/players/archive-extra').translation, 'never');
+  assert.equal(getStrategy(['unknown-dropdown'], {}, 'a', '/').translation, 'never');
+});
+
+test('news, article, linked entities, and comment strategies follow the approved page policy', () => {
+  const cases: ReadonlyArray<{
+    classes: readonly string[];
+    attributes?: Readonly<Record<string, string>>;
+    tagName?: string;
+    pathname?: string;
+    strategyId: string;
+    translation: string;
+    allowedModes: readonly string[];
+  }> = [
+    {
+      classes: ['newstext'],
+      strategyId: 'news-title',
+      translation: 'allowed',
+      allowedModes: ['A', 'B']
+    },
+    {
+      classes: ['newstext-con'],
+      strategyId: 'article-body',
+      translation: 'allowed',
+      allowedModes: ['A', 'B']
+    },
+    {
+      classes: [],
+      attributes: { 'data-tooltip-id': 'uid227764982' },
+      strategyId: 'article-entity',
+      translation: 'never',
+      allowedModes: []
+    },
+    {
+      classes: ['forum-middle'],
+      strategyId: 'comment-body',
+      translation: 'allowed',
+      allowedModes: ['A', 'B']
+    },
+    {
+      classes: ['newsheader'],
+      strategyId: 'news-index-heading',
+      translation: 'allowed',
+      allowedModes: ['A', 'B']
+    },
+    {
+      classes: ['headline'],
+      strategyId: 'match-detail-heading',
+      translation: 'allowed',
+      allowedModes: ['A']
+    },
+    {
+      classes: ['headline'],
+      tagName: 'H1',
+      strategyId: 'news-article-title',
+      translation: 'allowed',
+      allowedModes: ['A', 'B']
+    },
+    {
+      classes: [],
+      tagName: 'H1',
+      strategyId: 'sidebar-widget-heading',
+      translation: 'allowed',
+      allowedModes: ['A']
+    },
+    {
+      classes: ['playerOfTheWeekCategory'],
+      strategyId: 'player-week-category',
+      translation: 'allowed',
+      allowedModes: ['A']
+    },
+    {
+      classes: ['playerOfTheWeekTitle'],
+      strategyId: 'player-week-metric',
+      translation: 'allowed',
+      allowedModes: ['A']
+    },
+    {
+      classes: ['navsignin'],
+      strategyId: 'global-signin',
+      translation: 'allowed',
+      allowedModes: ['A']
+    },
+    {
+      classes: ['minigame-label-new'],
+      tagName: 'H1',
+      strategyId: 'minigame-heading',
+      translation: 'allowed',
+      allowedModes: ['A']
+    },
+    {
+      classes: ['sidebar-minigames-playnow-btn'],
+      strategyId: 'minigame-play',
+      translation: 'allowed',
+      allowedModes: ['A']
+    },
+    {
+      classes: ['button'],
+      attributes: { href: '/ranking/teams' },
+      tagName: 'A',
+      strategyId: 'left-ranking-complete-cta',
+      translation: 'allowed',
+      allowedModes: ['A']
+    },
+    {
+      classes: ['normal-weight'],
+      tagName: 'SPAN',
+      strategyId: 'left-ranking-update-meta',
+      translation: 'never',
+      allowedModes: []
+    },
+    {
+      classes: ['button', 'leftCol'],
+      attributes: { href: '/events' },
+      tagName: 'A',
+      strategyId: 'left-event-calendar-cta',
+      translation: 'allowed',
+      allowedModes: ['A']
+    },
+    {
+      classes: ['upcoming-headline'],
+      strategyId: 'match-list-heading',
+      translation: 'allowed',
+      allowedModes: ['A']
+    },
+    {
+      classes: [],
+      tagName: 'H3',
+      strategyId: 'match-filter-heading',
+      translation: 'allowed',
+      allowedModes: ['A']
+    },
+    {
+      classes: ['matches-filter-name-text'],
+      strategyId: 'match-filter-label',
+      translation: 'allowed',
+      allowedModes: ['A']
+    },
+    {
+      classes: ['map-stats-infobox-tab'],
+      strategyId: 'match-detail-stat-tab',
+      translation: 'allowed',
+      allowedModes: ['A']
+    },
+    {
+      classes: ['nav-link'],
+      strategyId: 'global-navigation',
+      translation: 'allowed',
+      allowedModes: ['A']
+    },
+    {
+      classes: ['event-status-headline'],
+      strategyId: 'events-current-heading',
+      translation: 'allowed',
+      allowedModes: ['A']
+    },
+    {
+      classes: ['event-status-upcoming-headline'],
+      strategyId: 'events-upcoming-heading',
+      translation: 'allowed',
+      allowedModes: ['A']
+    },
+    {
+      classes: ['ranking-open-region-selector'],
+      strategyId: 'team-ranking-region-selector',
+      translation: 'allowed',
+      allowedModes: ['A']
+    },
+    {
+      classes: [],
+      tagName: 'H1',
+      pathname: '/results',
+      strategyId: 'static-page-heading',
+      translation: 'allowed',
+      allowedModes: ['A']
+    },
+    {
+      classes: ['header-filters-title'],
+      pathname: '/results',
+      strategyId: 'filter-panel-title',
+      translation: 'allowed',
+      allowedModes: ['A']
+    },
+    {
+      classes: ['filter-headline'],
+      pathname: '/results',
+      strategyId: 'filter-label',
+      translation: 'allowed',
+      allowedModes: ['A']
+    },
+    {
+      classes: [],
+      tagName: 'H1',
+      pathname: '/fantasy',
+      strategyId: 'fantasy-main-heading',
+      translation: 'allowed',
+      allowedModes: ['A']
+    },
+    {
+      classes: [],
+      tagName: 'H2',
+      pathname: '/fantasy',
+      strategyId: 'fantasy-section-heading',
+      translation: 'allowed',
+      allowedModes: ['A']
+    },
+    {
+      classes: [],
+      tagName: 'BUTTON',
+      pathname: '/live',
+      strategyId: 'live-fullscreen-control',
+      translation: 'allowed',
+      allowedModes: ['A']
+    },
+    {
+      classes: [],
+      attributes: { href: '/live?fullscreen=1' },
+      tagName: 'A',
+      pathname: '/live',
+      strategyId: 'live-theater-link',
+      translation: 'allowed',
+      allowedModes: ['A']
+    }
+  ];
+
+  for (const expected of cases) {
+    const strategy = getStrategy(
+      expected.classes,
+      expected.attributes,
+      expected.tagName,
+      expected.pathname
+    );
+    assert.equal(strategy.id, expected.strategyId);
+    assert.equal(strategy.translation, expected.translation);
+    assert.deepEqual(strategy.allowedModes, expected.allowedModes);
+  }
+});
+
+test('route-scoped selectors match only their route and child paths', () => {
+  const definition = DISPLAY_SELECTORS.find(
+    ({ id }) => id === 'static-page-heading'
+  );
+  assert.equal(definition !== undefined, true);
+  if (definition === undefined) {
+    return;
+  }
+
+  assert.equal(selectorMatchesPath(definition, '/results'), true);
+  assert.equal(selectorMatchesPath(definition, '/results/2026'), true);
+  assert.equal(selectorMatchesPath(definition, '/players/archive/active'), true);
+  assert.equal(selectorMatchesPath(definition, '/results-old'), false);
+  assert.equal(selectorMatchesPath(definition, '/player/123/spirit'), false);
+  assert.equal(
+    selectorMatchesPath({ ...definition, pathPrefixes: undefined }, '/anywhere'),
+    true
+  );
+
+  const filterDefinition = DISPLAY_SELECTORS.find(
+    ({ id }) => id === 'filter-panel-title'
+  );
+  assert.equal(filterDefinition !== undefined, true);
+  if (filterDefinition === undefined) {
+    return;
+  }
+  assert.equal(selectorMatchesPath(filterDefinition, '/results'), true);
+  assert.equal(
+    selectorMatchesPath(filterDefinition, '/players/archive/active'),
+    false
+  );
+
+  const fantasyDefinition = DISPLAY_SELECTORS.find(
+    ({ id }) => id === 'fantasy-section-heading'
+  );
+  assert.equal(fantasyDefinition !== undefined, true);
+  if (fantasyDefinition === undefined) {
+    return;
+  }
+  assert.equal(selectorMatchesPath(fantasyDefinition, '/fantasy'), true);
+  assert.equal(selectorMatchesPath(fantasyDefinition, '/fantasy/game/650'), false);
+
+  const liveDefinition = DISPLAY_SELECTORS.find(
+    ({ id }) => id === 'live-fullscreen-control'
+  );
+  assert.equal(liveDefinition !== undefined, true);
+  if (liveDefinition === undefined) {
+    return;
+  }
+  assert.equal(selectorMatchesPath(liveDefinition, '/live'), true);
+  assert.equal(selectorMatchesPath(liveDefinition, '/live/match/123'), false);
 });
 
 test('each confirmed match-list strategy returns the expected translation policy', () => {
@@ -375,4 +818,64 @@ test('all strategy entries are represented by data rather than missing policies'
     ),
     true
   );
+});
+
+test('shared footer selectors have explicit page evidence, contexts, and replacement-only policies', () => {
+  const expected = [
+    {
+      selector: '.footer .footer-content .footer-section-header',
+      strategyId: 'footer-section-heading',
+      pageArea: 'global-footer',
+      classes: ['footer-section-header'],
+      context: 'structured'
+    },
+    {
+      selector: '.footer .footer-content .footer-section-subtext',
+      strategyId: 'footer-section-copy',
+      pageArea: 'global-footer',
+      classes: ['footer-section-subtext'],
+      context: 'prose'
+    },
+    {
+      selector: '.footer .footer-content .footer-cta-button',
+      strategyId: 'footer-cta',
+      pageArea: 'global-footer',
+      classes: ['footer-cta-button'],
+      context: 'structured'
+    },
+    {
+      selector: '.footer .footerlinks a.footerlink',
+      strategyId: 'footer-link',
+      pageArea: 'global-footer',
+      classes: ['footerlink'],
+      context: 'structured'
+    },
+    {
+      selector:
+        '.footer .footer-responsible-container .footer-generic-responible-container',
+      strategyId: 'footer-responsible-disclaimer',
+      pageArea: 'global-footer',
+      classes: ['footer-generic-responible-container'],
+      context: 'structured'
+    }
+  ] as const;
+
+  assert.deepEqual(
+    DISPLAY_SELECTORS.filter(({ pageArea }) => pageArea === 'global-footer').map(
+      ({ selector, pageArea }) => ({ selector, pageArea })
+    ),
+    expected.map(({ selector, pageArea }) => ({ selector, pageArea }))
+  );
+
+  for (const item of expected) {
+    const tagName =
+      item.strategyId === 'footer-cta' || item.strategyId === 'footer-link'
+        ? 'a'
+        : 'div';
+    const strategy = getStrategy(item.classes, {}, tagName);
+    assert.equal(strategy.id, item.strategyId);
+    assert.equal(strategy.translation, 'allowed');
+    assert.deepEqual(strategy.allowedModes, ['A']);
+    assert.equal(getTranslationContextForStrategyId(strategy.id), item.context);
+  }
 });

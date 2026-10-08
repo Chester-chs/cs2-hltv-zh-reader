@@ -27,6 +27,8 @@ export type ConnectionTestResult =
 
 export type ConnectionTestTransport = ChatCompletionsTransport;
 
+export const DEFAULT_CONNECTION_TEST_TIMEOUT_MS = 25000;
+
 async function fetchRequest(
   request: ChatCompletionsTransportRequest
 ): Promise<ChatCompletionsTransportResponse> {
@@ -73,7 +75,7 @@ export async function testProviderConnection(
   settings: ExtensionSettings,
   permissions: Pick<OptionalHostPermissions, 'contains'>,
   transport: ConnectionTestTransport = { send: fetchRequest },
-  timeoutMs = 5000
+  timeoutMs = DEFAULT_CONNECTION_TEST_TIMEOUT_MS
 ): Promise<ConnectionTestResult> {
   const parsed = parseProviderBaseURL(settings.baseURL);
   if (parsed === undefined) {

@@ -50,7 +50,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isPurpose(value: unknown): value is TranslationPurpose {
-  return value === 'plain' || value === 'event-name';
+  return value === 'plain' || value === 'event-name' || value === 'dictionary' || value === 'sentence';
 }
 
 function isTranslationContext(value: unknown): value is TranslationContext {

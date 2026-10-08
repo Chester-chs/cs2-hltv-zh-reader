@@ -21,7 +21,10 @@ export type ContentSettingKey =
   | 'baseURL'
   | 'model'
   | 'apiKey'
-  | 'useJsonOutputMode';
+  | 'useJsonOutputMode'
+  | 'theme'
+  | 'fontScale'
+  | 'permissionRevision';
 
 export type ContentSettingsChanges = Partial<
   Record<ContentSettingKey, ContentSettingsChange>
@@ -46,6 +49,7 @@ export async function applyContentSettingsChanges(
   const hasProviderChange = providerSettingKeys.some((key) =>
     Object.hasOwn(changes, key)
   );
+  const hasPermissionRecovery = Object.hasOwn(changes, 'permissionRevision');
 
   if (Object.hasOwn(changes, 'enabled') && typeof requestedEnabled === 'boolean') {
     enabled = requestedEnabled;
@@ -62,14 +66,14 @@ export async function applyContentSettingsChanges(
   const hasEnabledChange = enabled !== undefined;
   if (
     enabled === false ||
-    (!hasEnabledChange && !hasModeChange && !hasProviderChange)
+    (!hasEnabledChange && !hasModeChange && !hasProviderChange && !hasPermissionRecovery)
   ) {
     return;
   }
 
   await runtime.requestScan({
     retryFailedTranslations: true,
-    refreshTranslations: hasProviderChange,
+    refreshTranslations: hasProviderChange || hasPermissionRecovery,
     reapplyRecords: hasModeChange
   });
 }

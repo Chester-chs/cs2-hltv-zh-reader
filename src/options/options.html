@@ -39,6 +39,9 @@
         <input id="model" type="text" autocomplete="off" required />
 
         <label for="api-key">API Key</label>
+        <p class="field-help">
+          主导航和已收录的固定标签可离线翻译。新闻标题、正文等自由文本需要有效 API Key、服务商域名授权和网络连接。
+        </p>
         <div class="password-row">
           <input id="api-key" type="password" autocomplete="off" />
           <button id="toggle-key" type="button" class="secondary">显示</button>
@@ -51,6 +54,20 @@
         <p class="field-help">
           若服务商不支持 response_format 并因此报错，可取消勾选。关闭后扩展仍要求模型只输出 JSON。
         </p>
+
+        <section class="fallback-panel">
+          <label class="check-row" for="fallback-enabled">
+            <input id="fallback-enabled" type="checkbox" />
+            <span>启用备用翻译服务</span>
+          </label>
+          <p class="field-help">主服务商失败时自动尝试备用服务商；备用服务商需要单独授权和 API Key。</p>
+          <label for="fallback-base-url">备用 baseURL</label>
+          <input id="fallback-base-url" type="url" autocomplete="url" spellcheck="false" placeholder="https://api.openai.com" />
+          <label for="fallback-model">备用模型名</label>
+          <input id="fallback-model" type="text" autocomplete="off" placeholder="gpt-4o-mini" />
+          <label for="fallback-api-key">备用 API Key</label>
+          <input id="fallback-api-key" type="password" autocomplete="off" />
+        </section>
 
         <section class="permission-panel" aria-live="polite">
           <strong>服务商域名权限</strong>

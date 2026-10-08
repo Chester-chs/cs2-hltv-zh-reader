@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { defineConfig, type Plugin } from 'vite';
 
-type BuildTarget = 'background' | 'content' | 'options';
+type BuildTarget = 'background' | 'content' | 'options' | 'popup' | 'history';
 
 function copyRootAssets(): Plugin {
   return {
@@ -15,22 +15,35 @@ function copyRootAssets(): Plugin {
           source: readFileSync(resolve(process.cwd(), fileName), 'utf8')
         });
       }
+      for (const iconName of ['icon-16.png', 'icon-32.png', 'icon-48.png', 'icon-128.png']) {
+        this.emitFile({
+          type: 'asset',
+          fileName: `icons/${iconName}`,
+          source: readFileSync(resolve(process.cwd(), 'icons', iconName))
+        });
+      }
     }
   };
 }
 
 export default defineConfig(({ mode }) => {
-  if (mode !== 'background' && mode !== 'content' && mode !== 'options') {
+  if (
+    mode !== 'background' &&
+    mode !== 'content' &&
+    mode !== 'options' &&
+    mode !== 'popup' &&
+    mode !== 'history'
+  ) {
     throw new Error(`Unsupported build mode: ${mode}`);
   }
 
   const target: BuildTarget = mode;
-  const optionsTarget = target === 'options';
-  const root = optionsTarget
-    ? resolve(process.cwd(), 'src/options')
+  const pageTarget = target === 'options' || target === 'popup' || target === 'history';
+  const root = pageTarget
+    ? resolve(process.cwd(), `src/${target}`)
     : process.cwd();
-  const input = optionsTarget
-    ? resolve(process.cwd(), 'src/options/options.html')
+  const input = pageTarget
+    ? resolve(process.cwd(), `src/${target}/${target}.html`)
     : resolve(process.cwd(), `src/${target}.ts`);
 
   return {
@@ -39,7 +52,7 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: resolve(process.cwd(), 'dist'),
       emptyOutDir: target === 'background',
-      cssCodeSplit: optionsTarget,
+      cssCodeSplit: pageTarget,
       sourcemap: false,
       rollupOptions: {
         input,

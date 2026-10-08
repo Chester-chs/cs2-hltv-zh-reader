@@ -12,6 +12,7 @@ export interface GlossaryEntry {
   keep_as_is: boolean;
   category?: string;
   note?: string;
+  numericSuffix?: boolean;
 }
 
 export interface GlossaryDocument {
@@ -124,6 +125,9 @@ export function parseGlossaryJson(source: string): GlossaryLoadResult {
     if (typeof rawEntry.note === 'string') {
       entry.note = rawEntry.note;
     }
+    if (rawEntry.numericSuffix === true) {
+      entry.numericSuffix = true;
+    }
 
     entries.push(entry);
   });
@@ -200,7 +204,11 @@ function isIdentifierCharacter(character: string | undefined): boolean {
 function findMatches(
   text: string,
   glossary: GlossaryDocument,
-  options: { keepAsIsOnly?: boolean; category?: string } = {}
+  options: {
+    keepAsIsOnly?: boolean;
+    category?: string;
+    excludedCategories?: readonly string[];
+  } = {}
 ): InternalGlossaryMatch[] {
   const normalizedText = normalizeWithSourceMap(text);
   const candidates: InternalGlossaryMatch[] = [];
@@ -210,6 +218,9 @@ function findMatches(
       return;
     }
     if (options.category !== undefined && entry.category !== options.category) {
+      return;
+    }
+    if (options.excludedCategories?.includes(entry.category ?? '')) {
       return;
     }
 
@@ -294,7 +305,7 @@ export function findKeepAsIsMatches(
 export function lookupEntries(
   text: string,
   glossary: GlossaryDocument,
-  options: { category?: string } = {}
+  options: { category?: string; excludedCategories?: readonly string[] } = {}
 ): GlossaryLookup[] {
   return findMatches(text, glossary, options).map(({ entry, matchedText }) => ({
     entry,
@@ -302,11 +313,42 @@ export function lookupEntries(
   }));
 }
 
-function translateGlossaryCoveredText(
+export function translateGlossaryCoveredText(
   text: string,
-  glossary: GlossaryDocument
+  glossary: GlossaryDocument,
+  purpose: TranslationPurpose
 ): string | undefined {
-  const matches = findMatches(text, glossary);
+  const matches = findMatches(text, glossary, {
+    excludedCategories: excludedGlossaryCategoriesForPurpose(purpose)
+  });
+  return translateCoveredMatches(text, matches);
+}
+
+export function translateFixedUiTexts(
+  texts: string[],
+  glossary: GlossaryDocument,
+  categories: readonly string[] = ['ui']
+): string[] {
+  const fixedGlossary: GlossaryDocument = {
+    version: 1,
+    entries: glossary.entries.filter((entry) => categories.includes(entry.category ?? ''))
+  };
+  return texts.map((text) => {
+    const matches = findMatches(text, fixedGlossary);
+    const complete = translateCoveredMatches(text, matches);
+    if (complete !== undefined) {
+      return complete;
+    }
+    const suffix = matches.find((match) => match.entry.numericSuffix === true &&
+      /\d\s*$/u.test(text.slice(0, match.start)) && text.slice(match.end).trim().length === 0);
+    if (suffix === undefined || suffix.entry.keep_as_is) {
+      return text;
+    }
+    return text.slice(0, suffix.start) + suffix.entry.target + text.slice(suffix.end);
+  });
+}
+
+function translateCoveredMatches(text: string, matches: readonly GlossaryMatch[]): string | undefined {
   if (matches.length === 0) {
     return undefined;
   }
@@ -483,6 +525,17 @@ function hasOnlyLatinLetters(text: string): boolean {
   return foundLatinLetter;
 }
 
+function isLikelyLatinIdentity(text: string): boolean {
+  if (!/[^\u0000-\u007f]/u.test(text)) {
+    return false;
+  }
+  const words = text.match(/\p{L}+/gu) ?? [];
+  return (
+    words.length === 2 &&
+    words.every((word) => /^\p{Lu}\p{Ll}+$/u.test(word))
+  );
+}
+
 export function classifyText(
   text: string,
   glossary: GlossaryDocument,
@@ -572,6 +625,16 @@ export function classifyText(
   }
 
   if (context === 'prose') {
+    if (isLikelyLatinIdentity(trimmed)) {
+      return makeDecision(
+        text,
+        'uncertain',
+        false,
+        0.2,
+        'Two title-cased Latin words with diacritics are likely a person or team identity.',
+        keepMatches
+      );
+    }
     if (latinCount < 5 || tokens.length < 2) {
       return makeDecision(
         text,
@@ -618,7 +681,23 @@ export function classifyText(
   );
 }
 
-export type TranslationPurpose = 'plain' | 'event-name';
+export type TranslationPurpose = 'plain' | 'event-name' | 'dictionary' | 'sentence';
+
+function excludedGlossaryCategoriesForPurpose(
+  purpose: TranslationPurpose
+): readonly string[] {
+  return purpose === 'event-name'
+    ? ['ui', 'ui-match', 'ui-stats', 'ui-profile', 'ui-navigation']
+    : ['ui-stats', 'ui-profile', 'ui-navigation'];
+}
+
+function excludedGlossaryValidationCategoriesForPurpose(
+  purpose: TranslationPurpose
+): readonly string[] {
+  return purpose === 'event-name'
+    ? ['ui', 'ui-match', 'ui-stats', 'ui-profile', 'ui-navigation']
+    : ['ui-match', 'ui-stats', 'ui-profile', 'ui-navigation'];
+}
 
 export interface ProviderRequest {
   texts: string[];
@@ -679,10 +758,9 @@ export const DEFAULT_PROVIDER_TEMPERATURE = 0.2;
 class RequestTimeoutError extends Error {}
 
 async function sendWithTimeout(
-  transport: ChatCompletionsTransport,
-  request: ChatCompletionsTransportRequest,
+  operation: () => Promise<unknown>,
   timeoutMs: number
-): Promise<ChatCompletionsTransportResponse> {
+): Promise<unknown> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     const timeout = new Promise<never>((_, reject) => {
@@ -691,7 +769,7 @@ async function sendWithTimeout(
         Math.max(1, timeoutMs)
       );
     });
-    return await Promise.race([transport.send(request), timeout]);
+    return await Promise.race([operation(), timeout]);
   } finally {
     if (timer !== undefined) {
       clearTimeout(timer);
@@ -783,6 +861,9 @@ export function createOpenAICompatibleProvider(
     '',
     'purpose 为 plain 时，将可翻译内容自然地翻译成简体中文，并保留原文中的事实、数字和含义。',
     '',
+    'purpose 为 dictionary 时，按牛津词典风格整理每个选中的英文单词。必须包含所有适用的常见词性；每项使用“词性：中文释义 || concise English definition”格式，中文释义和英文解释都要简短准确。若输入是动词变形或过去分词，先给出“动词原形：...”一项。若能确定发音，接着给出“英式音标：...；美式音标：...”两项；不确定时省略音标。可选的网络义项使用“网络：...”表示。不要编造不常见的词性，不要输出推理过程、Markdown 或额外字段。',
+    'purpose 为 sentence 时，把选中的完整句子或短语自然翻译成简体中文，保留事实、数字、专名和原意，不输出词典格式。',
+    '',
     '只输出一个合法 JSON 对象，形状必须为 {"translations":["译文"]}。不要输出解释、额外字段、前后缀或 Markdown 代码块围栏。',
     '',
     '最小示例：',
@@ -829,12 +910,22 @@ export function createOpenAICompatibleProvider(
       };
 
       let response: ChatCompletionsTransportResponse;
+      let payload: unknown;
+      let payloadReadable = false;
       try {
-        response = await sendWithTimeout(
-          config.transport,
-          transportRequest,
-          config.timeoutMs
-        );
+        const result = await sendWithTimeout(async () => {
+          const nextResponse = await config.transport.send(transportRequest);
+          let nextPayload: unknown;
+          try {
+            nextPayload = await nextResponse.json();
+            payloadReadable = true;
+          } catch {
+            payloadReadable = false;
+          }
+          return { response: nextResponse, payload: nextPayload };
+        }, config.timeoutMs) as { response: ChatCompletionsTransportResponse; payload: unknown };
+        response = result.response;
+        payload = result.payload;
       } catch (error) {
         return {
           ok: false,
@@ -858,13 +949,7 @@ export function createOpenAICompatibleProvider(
           response.status >= 400 &&
           response.status < 500
         ) {
-          try {
-            rejectedResponseFormat = mentionsResponseFormat(
-              await response.json()
-            );
-          } catch {
-            // Provider error bodies are untrusted and are never surfaced.
-          }
+          rejectedResponseFormat = payloadReadable && mentionsResponseFormat(payload);
         }
         return {
           ok: false,
@@ -878,10 +963,7 @@ export function createOpenAICompatibleProvider(
         };
       }
 
-      let payload: unknown;
-      try {
-        payload = await response.json();
-      } catch {
+      if (!payloadReadable) {
         return {
           ok: false,
           error: {
@@ -911,6 +993,7 @@ export function createOpenAICompatibleProvider(
 }
 
 export type ValidationFailureCode =
+  | 'empty-translation'
   | 'protected-fragment-missing'
   | 'protected-fragment-count-mismatch'
   | 'year-token-missing'
@@ -968,14 +1051,28 @@ function validateProtectedFragments(
     }
   }
 
-  const firstPositions = protectedFragments
-    .filter((fragment) => fragment.length > 0)
-    .map((fragment) => translated.indexOf(fragment));
+  const firstPositions: number[] = [];
+  let searchFrom = 0;
+  for (const fragment of protectedFragments) {
+    if (fragment.length === 0) {
+      continue;
+    }
+    const position = translated.indexOf(fragment, searchFrom);
+    firstPositions.push(position);
+    if (position < 0) {
+      return {
+        ok: false,
+        code: 'structure-mismatch',
+        message: 'Protected fragments changed relative order.'
+      };
+    }
+    searchFrom = position + fragment.length;
+  }
 
   for (let index = 1; index < firstPositions.length; index += 1) {
     const previous = firstPositions[index - 1];
     const current = firstPositions[index];
-    if (previous !== undefined && current !== undefined && current < previous) {
+    if (previous >= 0 && current >= 0 && current < previous) {
       // structure-mismatch is intentionally limited to protected-fragment order.
       return {
         ok: false,
@@ -1008,10 +1105,13 @@ function validateYearTokens(
 function validateGlossaryTargets(
   original: string,
   translated: string,
-  glossary: GlossaryDocument
+  glossary: GlossaryDocument,
+  purpose: TranslationPurpose
 ): TranslationValidation {
   const requiredTargets = new Map<string, number>();
-  for (const lookup of lookupEntries(original, glossary)) {
+  for (const lookup of lookupEntries(original, glossary, {
+    excludedCategories: excludedGlossaryValidationCategoriesForPurpose(purpose)
+  })) {
     if (!lookup.entry.keep_as_is) {
       requiredTargets.set(
         lookup.entry.target,
@@ -1040,6 +1140,13 @@ export function validateTranslation(
   purpose: TranslationPurpose,
   glossary: GlossaryDocument
 ): TranslationValidation {
+  if (translated.trim().length === 0) {
+    return {
+      ok: false,
+      code: 'empty-translation',
+      message: 'Provider returned an empty translation.'
+    };
+  }
   const protectedResult = validateProtectedFragments(
     translated,
     protectedFragments
@@ -1048,7 +1155,7 @@ export function validateTranslation(
     return protectedResult;
   }
 
-  if (purpose === 'plain') {
+  if (purpose === 'plain' || purpose === 'dictionary' || purpose === 'sentence') {
     return { ok: true };
   }
 
@@ -1057,7 +1164,7 @@ export function validateTranslation(
     return yearResult;
   }
 
-  return validateGlossaryTargets(original, translated, glossary);
+  return validateGlossaryTargets(original, translated, glossary, purpose);
 }
 
 export interface CacheStore {
@@ -1083,6 +1190,15 @@ export function hashText(text: string): string {
 function createTranslationCacheKey(
   text: string,
   purpose: TranslationPurpose,
+  hash: TextHasher,
+  namespace: string
+): string {
+  return 'v3:' + encodeURIComponent(namespace) + ':' + purpose + ':' + encodeURIComponent(text);
+}
+
+function createLegacyTranslationCacheKey(
+  text: string,
+  purpose: TranslationPurpose,
   hash: TextHasher
 ): string {
   return 'v2:' + purpose + ':' + hash(text);
@@ -1103,22 +1219,26 @@ export interface TranslationServiceDependencies {
   cacheStore: CacheStore;
   context?: TranslationContext;
   hash?: TextHasher;
+  cacheNamespace?: string;
   onUncertainClassification?: UncertainClassificationSink;
 }
 
 export interface TranslationService {
   translate(texts: string[]): Promise<string[]>;
   translateEventNames(texts: string[]): Promise<string[]>;
+  translateDictionary?(texts: string[]): Promise<string[]>;
 }
 
 export function createTranslationService(
   dependencies: TranslationServiceDependencies
 ): TranslationService {
   const hash = dependencies.hash ?? hashText;
+  const cacheNamespace = dependencies.cacheNamespace ?? 'default';
   const inFlight = new Map<string, Promise<string>>();
 
   interface PendingTranslation {
     cacheKey: string;
+    legacyCacheKey: string;
     text: string;
     purpose: TranslationPurpose;
     protectedFragments: string[];
@@ -1136,10 +1256,13 @@ export function createTranslationService(
 
     for (let index = 0; index < texts.length; index += 1) {
       const text = texts[index] as string;
-      const glossaryTranslation = translateGlossaryCoveredText(
-        text,
-        dependencies.glossary
-      );
+      const glossaryTranslation = purpose === 'dictionary'
+        ? undefined
+        : translateGlossaryCoveredText(
+            text,
+            dependencies.glossary,
+            purpose
+          );
       if (glossaryTranslation !== undefined) {
         results[index] = glossaryTranslation;
         continue;
@@ -1148,7 +1271,9 @@ export function createTranslationService(
       const decision = classifyText(
         text,
         dependencies.glossary,
-        dependencies.context ?? DEFAULT_TRANSLATION_CONTEXT
+        purpose === 'dictionary'
+          ? 'structured'
+          : dependencies.context ?? DEFAULT_TRANSLATION_CONTEXT
       );
       if (decision.reviewRequired) {
         dependencies.onUncertainClassification?.({ text, decision });
@@ -1157,7 +1282,8 @@ export function createTranslationService(
         continue;
       }
 
-      const cacheKey = createTranslationCacheKey(text, purpose, hash);
+      const cacheKey = createTranslationCacheKey(text, purpose, hash, cacheNamespace);
+      const legacyCacheKey = createLegacyTranslationCacheKey(text, purpose, hash);
       const existing = inFlight.get(cacheKey);
       if (existing !== undefined) {
         waiters.push({ index, promise: existing });
@@ -1176,6 +1302,7 @@ export function createTranslationService(
         ).map((match) => match.matchedText);
         pending = {
           cacheKey,
+          legacyCacheKey,
           text,
           purpose,
           protectedFragments,
@@ -1192,7 +1319,13 @@ export function createTranslationService(
     const cacheResults = await Promise.all(
       candidates.map(async (candidate) => {
         try {
-          return await dependencies.cacheStore.get(candidate.cacheKey);
+          const current = await dependencies.cacheStore.get(candidate.cacheKey);
+          if (current !== undefined) {
+            return current;
+          }
+          return dependencies.cacheNamespace === undefined || cacheNamespace === 'default'
+            ? dependencies.cacheStore.get(candidate.legacyCacheKey)
+            : undefined;
         } catch {
           return undefined;
         }
@@ -1282,6 +1415,9 @@ export function createTranslationService(
     },
     translateEventNames(texts) {
       return translateBatch(texts, 'event-name');
+    },
+    translateDictionary(texts) {
+      return translateBatch(texts, 'dictionary');
     }
   };
 }

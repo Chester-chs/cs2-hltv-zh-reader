@@ -84,11 +84,17 @@ isEntirelyKeepAsIs(
 lookupEntries(
   text: string,
   glossary: GlossaryDocument,
-  options?: { category?: string }
+  options?: { category?: string; excludedCategories?: readonly string[] }
 ): GlossaryLookup[];
+
+translateGlossaryCoveredText(
+  text: string,
+  glossary: GlossaryDocument,
+  purpose: TranslationPurpose
+): string | undefined;
 ```
 
-匹配使用归一化比较视图、token 边界和最长匹配优先规则，同时保留原文字面与原文大小写。长标识符内部的子串不会命中。`findKeepAsIsMatches` 只查 `keep_as_is: true`；`lookupEntries` 可查询普通译名并按 category 过滤；无匹配返回空数组。
+匹配使用归一化比较视图、token 边界和最长匹配优先规则，同时保留原文字面与原文大小写。长标识符内部的子串不会命中。`findKeepAsIsMatches` 只查 `keep_as_is: true`；`lookupEntries` 可查询普通译名、按 category 过滤，或排除指定 categories；无匹配返回空数组。`translateGlossaryCoveredText` 仅在词条覆盖输入的全部字母时返回确定性译文，否则返回 `undefined`，不访问 Provider 或 DOM。
 
 ### P0-LANG
 
@@ -131,7 +137,7 @@ classifyText(
 
 中文判定不是单一正则：至少两个汉字、汉字占文字字符约 60% 以上，且无日文假名或韩文冲突信号时才判为目标语言。含中文但比例不足的中英混排文本保守地保留。
 
-`structured` 用于赛事名、赛段、meta 与时间等受控字段：存在拉丁字母且没有非拉丁字母冲突时，即使文本很短或混有数字也判为可翻译。纯数字、日期、符号、中文和完整 `keep_as_is` 项仍由前置规则拦截。glossary 能覆盖文本中全部字母时，TranslationService 会直接逐项替换译名或保留原文，并跳过分类器与 Provider；例如 `Grand Final` 直接变为 `总决赛`，`bo3` 保持 `bo3`。
+`structured` 用于赛事名、赛段、meta 与时间等受控字段：存在拉丁字母且没有非拉丁字母冲突时，即使文本很短或混有数字也判为可翻译。纯数字、日期、符号、中文和完整 `keep_as_is` 项仍由前置规则拦截。glossary 能覆盖文本中全部字母时，TranslationService 会直接逐项替换译名或保留原文，并跳过分类器与 Provider；例如普通页面中的 `Matches` 直接变为 `比赛`，`Grand Final` 直接变为 `总决赛`，`bo3` 保持 `bo3`。`event-name` purpose 在直接替换和目标校验中都会排除 `category: "ui"`，避免赛事品牌或赛事标题里的通用 UI 单词被改写或被强制要求 UI 译名；赛事、赛段、赛季等其他词条仍按原规则校验。
 
 `prose` 用于新闻标题与正文，要求至少 5 个拉丁字母和至少 2 个英文 token。低于此门槛的短文保留原文。
 
@@ -152,7 +158,7 @@ type UncertainClassificationSink = (
 ### Provider
 
 ```ts
-type TranslationPurpose = 'plain' | 'event-name';
+type TranslationPurpose = 'plain' | 'event-name' | 'dictionary' | 'sentence';
 
 interface ProviderRequest {
   texts: string[];
@@ -250,7 +256,7 @@ validateTranslation(
 
 - 年份数字 token 保留；
 - 原文命中 `category: "season"` 时，对应 `target` 必须出现；
-- 原文命中其他 `keep_as_is: false` 词条时，对应 `target` 必须出现。
+- 原文命中其他非 `ui` 类别的 `keep_as_is: false` 词条时，对应 `target` 必须出现；`category: "ui"` 的页面文案词条不参与赛事名替换或校验。
 
 `plain` 不检查普通 glossary target。长句允许合理同义译法，例如：
 
@@ -259,6 +265,8 @@ They lost the Grand Final → 他们输掉了决赛
 ```
 
 这不会因缺少逐字的“总决赛”而回退原文。校验失败时服务层丢弃译文并返回原文。
+
+`dictionary` 用于选中的单词词典查询。它跳过页面 UI glossary 的直接替换，让像 `Live` 这样的短词也能送到 Provider；Provider 必须返回适合阅读的简体中文释义、简短英文解释、适用的常见词性、原形和可用的英美音标。`sentence` 用于选中的完整句子或短语，返回普通简体中文翻译；这两个 purpose 在页面翻译关闭时仍可使用。
 
 校验已知局限：词表未收录的季节或月份无法校验；通用规则不能判断语序自然度；同一季节词在不同赛事中可能有不同习惯译法；未收录品牌和模型语义质量无法由该校验保证。
 
@@ -295,6 +303,7 @@ interface TranslationServiceDependencies {
 interface TranslationService {
   translate(texts: string[]): Promise<string[]>;
   translateEventNames(texts: string[]): Promise<string[]>;
+  translateDictionary?(texts: string[]): Promise<string[]>;
 }
 
 createTranslationService(
@@ -302,7 +311,7 @@ createTranslationService(
 ): TranslationService;
 ```
 
-缓存 key 由具名函数 `createTranslationCacheKey(text, purpose, hash)` 生成，格式为 `v2:<purpose>:<text hash>`。服务会先查缓存，只请求增量；相同文本与 purpose 的并发请求通过 in-flight 去重。Provider、校验和缓存失败均回退原文。`CacheStore` 是必填依赖，核心层没有默认内存缓存。
+缓存 key 由具名函数 `createTranslationCacheKey(text, purpose, hash)` 生成，当前包含 Provider namespace、purpose 和编码后的原文。服务会先查缓存，只请求增量；相同文本与 purpose 的并发请求通过 in-flight 去重。Provider、校验和缓存失败均回退原文。`CacheStore` 是必填依赖，核心层没有默认内存缓存。
 
 `context` 是 TranslationService 的可选依赖配置，默认 `comment`；`TranslationService` 的公开方法签名保持不变。内容运行时通过上下文适配器把元素策略映射传给 background，background 再注入核心服务。glossary 完整覆盖的受控文本在分类和 provider 调用前直接替换，因此受控术语由代码保证，不依赖提示词或模型遵守术语。
 
@@ -314,8 +323,14 @@ B3b keeps the public TranslationService method signatures unchanged: translate(t
 
 This behavior change is required for structured JSON batch output and per-item validation. The existing validateTranslation runs independently for each returned item. A failed item returns its original text while valid siblings remain usable and cacheable. A malformed JSON response or array-count mismatch fails the provider batch and returns the original input through the existing B3a failure path.
 
-B3a wrote cache keys as a bare text hash. B3b changes the key format to `v2:<purpose>:<text hash>` through the named `createTranslationCacheKey` function. This purpose namespace prevents a plain result from being reused as an event-name result without event-name validation. Existing B3a records remain in IndexedDB under their old bare hashes and are not read or automatically deleted. A text with only an old-format entry is translated once again and then stored under its new purpose-specific key. This does not change returned values, settings, permissions, or valid v2 cache entries; users can remove old and current records with Clear translation cache.
+B3a wrote cache keys as a bare text hash. B3b introduced purpose-aware keys and the current implementation adds a Provider namespace so model changes cannot reuse another model's result. Existing older records remain in IndexedDB and are not read or automatically deleted. A text with only an old-format entry is translated once again and then stored under its current key. Users can remove old and current records with Clear translation cache.
 
 In-flight de-duplication remains active across concurrent calls for the same text and purpose. Cache identity includes purpose so a plain translation cannot bypass event-name validation. Tests must prove: N cache misses produce one provider call; cache hits are omitted; a single validation failure preserves valid siblings; and concurrent duplicate requests share pending work. Existing same-text concurrency coverage must remain. Update assertions whose provider-call premise changes without weakening them, and keep all 64 existing tests passing.
 
 This is an interface-preserving behavior change, not a public interface change. It is part of the B3b provider contract and must not be mistaken for an accidental multi-text request.
+
+## 0.0.3 scoped fixed UI
+
+`translateFixedUiTexts(texts: string[], glossary, categories = ["ui"]): string[]` is pure. Complete glossary coverage is required; unknown strings stay original. Stats/profile/navigation categories are selected by display data and excluded from general plain/event-name substitution and validation. The `ui-stats` entry for `years` may set `numericSuffix: true`: only a trailing unit preceded by a numeric value may be substituted, preserving a preceding identity exactly. This is local label admission, not partial-comment translation.
+
+The content bundle embeds the authoring glossary for immediate local labels; the background still loads its packaged copy. No new default cache exists in the core. Provider/service interfaces and per-call core batching stay unchanged. The content layer bounds large page groups and renders completed batches progressively. Production deadlines are 25 seconds for the provider, 30 for the background handler, and 35 for the content message adapter. A successful minimal connection test does not establish that a page request fits the former five-second limit; no real page latency is claimed measured.

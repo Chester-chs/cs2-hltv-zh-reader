@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HLTV 词典历史</title>
+    <link rel="stylesheet" href="/history.css" />
+  </head>
+  <body>
+    <main>
+      <header class="page-header">
+        <div>
+          <p class="eyebrow">CS2 HLTV 中文阅读器</p>
+          <h1>词典历史</h1>
+          <p id="summary">正在读取…</p>
+        </div>
+        <button id="close" class="quiet" type="button">关闭</button>
+      </header>
+
+      <nav class="filters" aria-label="词典记录筛选">
+        <button class="filter active" type="button" data-filter="all">全部</button>
+        <button class="filter" type="button" data-filter="favorites">收藏</button>
+        <button id="clear" class="quiet danger" type="button">清空当前列表</button>
+      </nav>
+
+      <section class="entries-panel">
+        <ul id="entries" class="entries" aria-live="polite"></ul>
+      </section>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

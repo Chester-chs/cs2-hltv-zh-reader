@@ -102,6 +102,1640 @@
       "target": "冬季",
       "keep_as_is": false,
       "category": "season"
+    },
+    {
+      "term": "News",
+      "target": "新闻",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "HLTV",
+      "target": "HLTV",
+      "keep_as_is": true,
+      "category": "brand",
+      "note": "网站品牌名，保留英文"
+    },
+    {
+      "term": "Counter-Strike",
+      "target": "Counter-Strike",
+      "keep_as_is": true,
+      "category": "game",
+      "note": "游戏名称，保留英文"
+    },
+    {
+      "term": "CS2",
+      "target": "CS2",
+      "keep_as_is": true,
+      "category": "game",
+      "note": "游戏简称，保留英文"
+    },
+    {
+      "term": "Valve",
+      "target": "Valve",
+      "keep_as_is": true,
+      "category": "organization",
+      "note": "公司名称，保留英文"
+    },
+    {
+      "term": "VRS",
+      "target": "VRS",
+      "keep_as_is": true,
+      "category": "metric",
+      "note": "排名系统缩写，保留英文"
+    },
+    {
+      "term": "KAST",
+      "target": "KAST",
+      "keep_as_is": true,
+      "category": "metric",
+      "note": "CS 统计指标缩写，保留英文"
+    },
+    {
+      "term": "Matches",
+      "target": "比赛",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Results",
+      "target": "赛果",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Events",
+      "target": "赛事",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Players",
+      "target": "选手",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Stats",
+      "target": "数据",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Forum",
+      "target": "论坛",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Media",
+      "target": "媒体",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Betting",
+      "target": "竞猜",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Fantasy",
+      "target": "梦幻电竞",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Major",
+      "target": "Major 赛事",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Upcoming",
+      "target": "即将开始的",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Ongoing",
+      "target": "进行中的",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Match filters",
+      "target": "比赛筛选",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Starred matches only",
+      "target": "仅显示已收藏的比赛",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Ranked",
+      "target": "有排名",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Unranked",
+      "target": "无排名",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Win %",
+      "target": "胜率",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Pick %",
+      "target": "选图率",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Ban %",
+      "target": "禁用率",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Lineups",
+      "target": "阵容",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Matches, past 3 months",
+      "target": "近 3 个月的比赛",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Head to head",
+      "target": "历史交锋",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "VRS forecast",
+      "target": "VRS 预测",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Regional rankings",
+      "target": "地区排名",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Counter-Strike Players",
+      "target": "Counter-Strike 选手",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "FILTERS",
+      "target": "筛选",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Stars",
+      "target": "星级",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Time",
+      "target": "时间",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Match type",
+      "target": "比赛类型",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Map",
+      "target": "地图",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Event",
+      "target": "赛事",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Valve ranked",
+      "target": "Valve 排名",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Fall season",
+      "target": "秋季赛",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "ABOUT FALL SEASON",
+      "target": "关于秋季赛",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Partner Games",
+      "target": "合作游戏",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "PRIZES",
+      "target": "奖励",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "POINTS SYSTEM",
+      "target": "积分规则",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Fullscreen",
+      "target": "全屏",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Theater",
+      "target": "影院模式",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "RANKING",
+      "target": "排名",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "FPL RANKING",
+      "target": "FPL 排名",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "GALLERIES",
+      "target": "图库",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "RECENT ACTIVITY",
+      "target": "最新动态",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Player of the week",
+      "target": "本周最佳选手",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Opening duels won",
+      "target": "首杀对决胜率",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Sign in",
+      "target": "登录",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "MINIGAME",
+      "target": "小游戏",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Play",
+      "target": "开始",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Complete ranking",
+      "target": "查看完整排名",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Event calendar",
+      "target": "赛事日历",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "TOP 30 TRANSFERS",
+      "target": "近期前30转会",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Download the HLTV app",
+      "target": "下载 HLTV 应用",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "HLTV Community t-shirt and sweatshirt available now",
+      "target": "HLTV 社区 T 恤和卫衣现已发售",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Optimized to keep you up to date on the go",
+      "target": "随时掌握最新动态",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "18+ Bet Responsibly",
+      "target": "18+ 理性投注",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Live Counter-Strike matches",
+      "target": "正在进行的 Counter-Strike 比赛",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Ongoing events",
+      "target": "进行中赛事",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Upcoming events",
+      "target": "即将开始赛事",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Fantasy Fall season 2026",
+      "target": "梦幻电竞 2026 秋季赛",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "ABOUT FALL SEASON 2026",
+      "target": "关于 2026 秋季赛",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "PLAYER CONTEXT",
+      "target": "选手信息",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "NAVIGATION",
+      "target": "导航",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "SEARCH STATS",
+      "target": "搜索数据",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "EVENT FILTER",
+      "target": "赛事筛选",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "TIME FILTER",
+      "target": "时间筛选",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "RANKING FILTER",
+      "target": "排名筛选",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "MAP FILTER",
+      "target": "地图筛选",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "VERSION",
+      "target": "游戏版本",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "All",
+      "target": "全部",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Both",
+      "target": "全部",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Overview",
+      "target": "概览",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Individual",
+      "target": "个人数据",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Career",
+      "target": "职业生涯",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Weapons",
+      "target": "武器",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Clutches",
+      "target": "残局",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Multi-kills",
+      "target": "多杀",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Opponents",
+      "target": "对手",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Flashes",
+      "target": "闪光弹",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Opening kills",
+      "target": "首杀",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Pistol rounds",
+      "target": "手枪局",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Teams",
+      "target": "战队",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Maps",
+      "target": "地图",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Leaderboards",
+      "target": "排行榜",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Compare",
+      "target": "对比",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "1.6 stats section",
+      "target": "1.6 数据专区",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Show player average",
+      "target": "显示选手平均值",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "GOOD",
+      "target": "优秀",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "T RATING",
+      "target": "进攻评分",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "CT RATING",
+      "target": "防守评分",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "RATING",
+      "target": "评分",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "ROUND SWING",
+      "target": "回合影响",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "DPR",
+      "target": "回合死亡",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "KAST",
+      "target": "回合贡献率",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "MULTI-KILL",
+      "target": "多杀率",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "ADR",
+      "target": "回合均伤",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "KPR",
+      "target": "回合击杀",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "N/A",
+      "target": "暂无",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "OKAY",
+      "target": "一般",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "POOR",
+      "target": "较差",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "years",
+      "target": "岁",
+      "keep_as_is": false,
+      "category": "ui-stats",
+      "numericSuffix": true
+    },
+    {
+      "term": "Player profile",
+      "target": "选手主页",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Side",
+      "target": "阵营",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Both Sides",
+      "target": "双方",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "CT Side",
+      "target": "防守方",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "T Side",
+      "target": "进攻方",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Stats per",
+      "target": "统计口径",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Round",
+      "target": "每回合",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "rounds",
+      "target": "回合",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Firepower",
+      "target": "火力",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Entrying",
+      "target": "突破",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Trading",
+      "target": "补枪",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Opening",
+      "target": "首杀",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Clutching",
+      "target": "残局",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Sniping",
+      "target": "狙击",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Utility",
+      "target": "道具",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Search...",
+      "target": "搜索…",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Username",
+      "target": "用户名",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Password",
+      "target": "密码",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Username or email",
+      "target": "用户名或邮箱",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Search team...",
+      "target": "搜索战队…",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "New",
+      "target": "新",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Player",
+      "target": "选手",
+      "keep_as_is": false,
+      "category": "ui-profile"
+    },
+    {
+      "term": "Info",
+      "target": "资料",
+      "keep_as_is": false,
+      "category": "ui-profile"
+    },
+    {
+      "term": "Teams",
+      "target": "战队",
+      "keep_as_is": false,
+      "category": "ui-profile"
+    },
+    {
+      "term": "Roster",
+      "target": "阵容",
+      "keep_as_is": false,
+      "category": "ui-profile"
+    },
+    {
+      "term": "Overview",
+      "target": "概览",
+      "keep_as_is": false,
+      "category": "ui-profile"
+    },
+    {
+      "term": "Achievements",
+      "target": "荣誉",
+      "keep_as_is": false,
+      "category": "ui-profile"
+    },
+    {
+      "term": "Trophies",
+      "target": "奖杯",
+      "keep_as_is": false,
+      "category": "ui-profile"
+    },
+    {
+      "term": "Upcoming & recent matches",
+      "target": "近期与即将开始的比赛",
+      "keep_as_is": false,
+      "category": "ui-profile"
+    },
+    {
+      "term": "Valve ranking",
+      "target": "Valve 排名",
+      "keep_as_is": false,
+      "category": "ui-profile"
+    },
+    {
+      "term": "World ranking",
+      "target": "世界排名",
+      "keep_as_is": false,
+      "category": "ui-profile"
+    },
+    {
+      "term": "Weeks in top30 for core",
+      "target": "核心阵容进入前 30 的周数",
+      "keep_as_is": false,
+      "category": "ui-profile"
+    },
+    {
+      "term": "Average player age",
+      "target": "选手平均年龄",
+      "keep_as_is": false,
+      "category": "ui-profile"
+    },
+    {
+      "term": "Coach",
+      "target": "教练",
+      "keep_as_is": false,
+      "category": "ui-profile"
+    },
+    {
+      "term": "World ranking development for core",
+      "target": "核心阵容世界排名走势",
+      "keep_as_is": false,
+      "category": "ui-profile"
+    },
+    {
+      "term": "Statistics",
+      "target": "数据统计",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Total kills",
+      "target": "总击杀数",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Headshot %",
+      "target": "爆头率",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Total deaths",
+      "target": "总死亡数",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "K/D Ratio",
+      "target": "击杀/死亡比",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Damage / Round",
+      "target": "每回合平均伤害",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Grenade dmg / Round",
+      "target": "每回合投掷物伤害",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Maps played",
+      "target": "已打地图数",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Rounds played",
+      "target": "已打回合数",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Kills / round",
+      "target": "每回合击杀数",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Assists / round",
+      "target": "每回合助攻数",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Deaths / round",
+      "target": "每回合死亡数",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Saved by teammate / round",
+      "target": "每回合被队友救下次数",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Saved teammates / round",
+      "target": "每回合救下队友次数",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Impact rating",
+      "target": "影响力评分",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Featured ratings",
+      "target": "对阵强队评分",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Eco-adjust stats",
+      "target": "按经济差异调整数据",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Avg.",
+      "target": "平均",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Deaths per round",
+      "target": "每回合死亡数",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Kills per round",
+      "target": "每回合击杀数",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Teammates",
+      "target": "队友",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Form in filter",
+      "target": "筛选范围内状态",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Maps in filter",
+      "target": "筛选范围内地图数",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Majors",
+      "target": "官方大赛",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Big events",
+      "target": "大型赛事",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "MVP events",
+      "target": "设有最佳选手奖的赛事",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "LAN",
+      "target": "线下赛事",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Online",
+      "target": "线上赛事",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Last month",
+      "target": "最近一个月",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Last 3 months",
+      "target": "最近 3 个月",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Last 6 months",
+      "target": "最近 6 个月",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Last 12 months",
+      "target": "最近 12 个月",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Top 5",
+      "target": "前 5 名",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Top 10",
+      "target": "前 10 名",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Top 20",
+      "target": "前 20 名",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Top 30",
+      "target": "前 30 名",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Top 50",
+      "target": "前 50 名",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Event type",
+      "target": "赛事类型",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Best Of X",
+      "target": "比赛赛制",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Best of 1",
+      "target": "一局定胜负",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Best of 3",
+      "target": "三局两胜",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Best of 5",
+      "target": "五局三胜",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Grand final",
+      "target": "总决赛",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Playoffs",
+      "target": "淘汰赛",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Pre-playoff",
+      "target": "淘汰赛前阶段",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "vs top 5 opponents",
+      "target": "对阵前 5 名对手",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "vs top 10 opponents",
+      "target": "对阵前 10 名对手",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "vs top 20 opponents",
+      "target": "对阵前 20 名对手",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "vs top 30 opponents",
+      "target": "对阵前 30 名对手",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "vs top 50 opponents",
+      "target": "对阵前 50 名对手",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Sides",
+      "target": "阵营",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "CT",
+      "target": "防守方",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "T",
+      "target": "进攻方",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "全部 Sides",
+      "target": "双方",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "CT 阵营",
+      "target": "防守方",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "T 阵营",
+      "target": "进攻方",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "All transfers",
+      "target": "查看全部转会",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Now playing",
+      "target": "正在直播",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Top streams",
+      "target": "热门直播",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Casters",
+      "target": "解说",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Streamers",
+      "target": "主播",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Organizers",
+      "target": "赛事主办方",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "viewers",
+      "target": "观众",
+      "keep_as_is": false,
+      "category": "ui",
+      "numericSuffix": true
+    },
+    {
+      "term": "Update privacy preferences",
+      "target": "更新隐私偏好",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Timeline",
+      "target": "时间线",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Data from 2016 and onward only, be wary of your sample size.",
+      "target": "数据仅包含 2016 年及之后的比赛，请注意样本量。",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "How many times a teammate killed the attacker that was damaging this player within 1 second of the last attack. Data from 2016 and onward only, be wary of your sample size.",
+      "target": "队友在最后一次攻击后 1 秒内，击杀正在伤害该选手的敌人的次数。数据仅包含 2016 年及之后的比赛，请注意样本量。",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "How many times this player killed an opponent who was attacking a teammate, within 1 second of the last attack. Data from 2016 and onward only, be wary of your sample size.",
+      "target": "该选手在最后一次攻击后 1 秒内，击杀正在攻击队友的敌人的次数。数据仅包含 2016 年及之后的比赛，请注意样本量。",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Measures the impact made from multikills, opening kills, and clutches.",
+      "target": "衡量多杀、首杀和残局带来的影响。",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "Start date",
+      "target": "开始日期",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "End date",
+      "target": "结束日期",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Add to context..",
+      "target": "添加战队、选手或赛事",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "BENCH",
+      "target": "替补席",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "No team",
+      "target": "暂无战队",
+      "keep_as_is": false,
+      "category": "ui"
+    },
+    {
+      "term": "Search the stats section for teams, players and events, from here you can easily add them to your context.",
+      "target": "搜索战队、选手和赛事，将它们加入当前统计范围。",
+      "keep_as_is": false,
+      "category": "ui-stats"
+    },
+    {
+      "term": "All",
+      "target": "全部",
+      "keep_as_is": false,
+      "category": "ui-navigation"
+    },
+    {
+      "term": "All events",
+      "target": "全部赛事",
+      "keep_as_is": false,
+      "category": "ui-navigation"
+    },
+    {
+      "term": "Archive",
+      "target": "历史赛事",
+      "keep_as_is": false,
+      "category": "ui-navigation"
+    },
+    {
+      "term": "Calendar",
+      "target": "赛事日历",
+      "keep_as_is": false,
+      "category": "ui-navigation"
+    },
+    {
+      "term": "VRS Invites",
+      "target": "排名积分邀请",
+      "keep_as_is": false,
+      "category": "ui-navigation"
+    },
+    {
+      "term": "Retired Players",
+      "target": "退役选手",
+      "keep_as_is": false,
+      "category": "ui-navigation"
+    },
+    {
+      "term": "Transfers",
+      "target": "转会",
+      "keep_as_is": false,
+      "category": "ui-navigation"
+    },
+    {
+      "term": "MVPs",
+      "target": "最佳选手奖",
+      "keep_as_is": false,
+      "category": "ui-navigation"
+    },
+    {
+      "term": "EVPs",
+      "target": "杰出选手奖",
+      "keep_as_is": false,
+      "category": "ui-navigation"
+    },
+    {
+      "term": "Top20",
+      "target": "年度前20选手",
+      "keep_as_is": false,
+      "category": "ui-navigation"
+    },
+    {
+      "term": "Prospects",
+      "target": "潜力新星",
+      "keep_as_is": false,
+      "category": "ui-navigation"
+    },
+    {
+      "term": "Player explorer",
+      "target": "选手探索",
+      "keep_as_is": false,
+      "category": "ui-navigation"
+    },
+    {
+      "term": "Hall of Fame",
+      "target": "名人堂",
+      "keep_as_is": false,
+      "category": "ui-navigation"
+    },
+    {
+      "term": "Stats overview",
+      "target": "数据概览",
+      "keep_as_is": false,
+      "category": "ui-navigation"
+    },
+    {
+      "term": "Top players",
+      "target": "选手排行",
+      "keep_as_is": false,
+      "category": "ui-navigation"
+    },
+    {
+      "term": "Top teams",
+      "target": "战队排行",
+      "keep_as_is": false,
+      "category": "ui-navigation"
+    },
+    {
+      "term": "Maps",
+      "target": "地图",
+      "keep_as_is": false,
+      "category": "ui-navigation"
+    },
+    {
+      "term": "Fantasy Overview",
+      "target": "梦幻电竞概览",
+      "keep_as_is": false,
+      "category": "ui-navigation"
+    },
+    {
+      "term": "Counter-Strike",
+      "target": "反恐精英",
+      "keep_as_is": false,
+      "category": "ui-navigation"
+    },
+    {
+      "term": "Hardware & Tweaks",
+      "target": "硬件与调校",
+      "keep_as_is": false,
+      "category": "ui-navigation"
+    },
+    {
+      "term": "Bugs & Suggestions",
+      "target": "问题与建议",
+      "keep_as_is": false,
+      "category": "ui-navigation"
+    },
+    {
+      "term": "HLTV Confirmed",
+      "target": "HLTV访谈节目",
+      "keep_as_is": false,
+      "category": "ui-navigation"
+    },
+    {
+      "term": "Betting US",
+      "target": "美国竞猜",
+      "keep_as_is": false,
+      "category": "ui-navigation"
+    },
+    {
+      "term": "Betting Canada",
+      "target": "加拿大竞猜",
+      "keep_as_is": false,
+      "category": "ui-navigation"
+    },
+    {
+      "term": "Betting UK",
+      "target": "英国竞猜",
+      "keep_as_is": false,
+      "category": "ui-navigation"
+    },
+    {
+      "term": "Betting India",
+      "target": "印度竞猜",
+      "keep_as_is": false,
+      "category": "ui-navigation"
+    },
+    {
+      "term": "Betting Brazil",
+      "target": "巴西竞猜",
+      "keep_as_is": false,
+      "category": "ui-navigation"
+    },
+    {
+      "term": "Betting Sweden",
+      "target": "瑞典竞猜",
+      "keep_as_is": false,
+      "category": "ui-navigation"
+    },
+    {
+      "term": "Betting Denmark",
+      "target": "丹麦竞猜",
+      "keep_as_is": false,
+      "category": "ui-navigation"
+    },
+    {
+      "term": "Betting Other Locations",
+      "target": "其他地区竞猜",
+      "keep_as_is": false,
+      "category": "ui-navigation"
+    },
+    {
+      "term": "Compare odds",
+      "target": "比较赔率",
+      "keep_as_is": false,
+      "category": "ui-navigation"
+    },
+    {
+      "term": "Analytics",
+      "target": "数据分析",
+      "keep_as_is": false,
+      "category": "ui-navigation"
+    },
+    {
+      "term": "Match over",
+      "target": "比赛结束",
+      "keep_as_is": false,
+      "category": "ui-match"
+    },
+    {
+      "term": "Rewatch",
+      "target": "回看",
+      "keep_as_is": false,
+      "category": "ui-match"
+    },
+    {
+      "term": "Demo download",
+      "target": "下载录像",
+      "keep_as_is": false,
+      "category": "ui-match"
+    },
+    {
+      "term": "Match stats",
+      "target": "比赛数据",
+      "keep_as_is": false,
+      "category": "ui-match"
+    },
+    {
+      "term": "Eco-adjusted",
+      "target": "经济调整",
+      "keep_as_is": false,
+      "category": "ui-match"
+    },
+    {
+      "term": "Detailed stats",
+      "target": "详细数据",
+      "keep_as_is": false,
+      "category": "ui-match"
+    },
+    {
+      "term": "Highlights",
+      "target": "精彩集锦",
+      "keep_as_is": false,
+      "category": "ui-match"
+    },
+    {
+      "term": "removed",
+      "target": "禁用",
+      "keep_as_is": false,
+      "category": "ui-match"
+    },
+    {
+      "term": "picked",
+      "target": "选择",
+      "keep_as_is": false,
+      "category": "ui-match"
+    },
+    {
+      "term": "PICK",
+      "target": "选图",
+      "keep_as_is": false,
+      "category": "ui-match"
+    },
+    {
+      "term": "Both",
+      "target": "双方",
+      "keep_as_is": false,
+      "category": "ui-match"
+    },
+    {
+      "term": "All maps",
+      "target": "全部地图",
+      "keep_as_is": false,
+      "category": "ui-match"
+    },
+    {
+      "term": "Maps",
+      "target": "地图",
+      "keep_as_is": false,
+      "category": "ui-match"
+    },
+    {
+      "term": "Map stats",
+      "target": "地图数据",
+      "keep_as_is": false,
+      "category": "ui-match"
+    },
+    {
+      "term": "Map veto",
+      "target": "地图禁选",
+      "keep_as_is": false,
+      "category": "ui-match"
+    },
+    {
+      "term": "Watch",
+      "target": "观看",
+      "keep_as_is": false,
+      "category": "ui-match"
+    },
+    {
+      "term": "Win %",
+      "target": "胜率",
+      "keep_as_is": false,
+      "category": "ui-match"
+    },
+    {
+      "term": "Pick %",
+      "target": "选图率",
+      "keep_as_is": false,
+      "category": "ui-match"
+    },
+    {
+      "term": "Ban %",
+      "target": "禁用率",
+      "keep_as_is": false,
+      "category": "ui-match"
+    },
+    {
+      "term": "CT Side",
+      "target": "CT 方",
+      "keep_as_is": false,
+      "category": "ui-match"
+    },
+    {
+      "term": "T Side",
+      "target": "T 方",
+      "keep_as_is": false,
+      "category": "ui-match"
+    },
+    {
+      "term": "Match finished",
+      "target": "比赛已结束",
+      "keep_as_is": false,
+      "category": "ui-match"
     }
   ]
 }

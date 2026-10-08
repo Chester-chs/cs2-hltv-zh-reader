@@ -7,6 +7,7 @@ import {
   decodeTranslateResponse,
   encodeTranslateRequest,
   type TranslateRequest,
+  type TranslateFailureCode,
   type TranslationPurpose as ProtocolTranslationPurpose
 } from '../background/protocol.ts';
 
@@ -20,7 +21,7 @@ export interface BackgroundTranslationServiceOptions {
   requestId?: () => string;
 }
 
-export const DEFAULT_CONTENT_TIMEOUT_MS = 6000;
+export const DEFAULT_CONTENT_TIMEOUT_MS = 35000;
 
 export interface ContextualTranslationAdapter {
   translateWithContext(
@@ -30,26 +31,41 @@ export interface ContextualTranslationAdapter {
   ): Promise<string[]>;
 }
 
+export interface DetailedTranslationResult {
+  translations: string[];
+  errorCode?: TranslateFailureCode;
+}
+
+export interface DetailedContextualTranslationAdapter {
+  translateWithContextDetailed(
+    texts: string[],
+    context: TranslationContext,
+    purpose: TranslationPurpose
+  ): Promise<DetailedTranslationResult>;
+}
+
 export interface RefreshableTranslationAdapter {
   clearSessionCache(): void;
 }
 
+class ContentTranslationTimeoutError extends Error {}
+
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
-  return new Promise((resolve) => {
-    let settled = false;
-    const finish = (value: T): void => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      clearTimeout(timer);
-      resolve(value);
-    };
+  return new Promise((resolve, reject) => {
     const timer = setTimeout(
-      () => finish(undefined as T),
+      () => reject(new ContentTranslationTimeoutError('Content translation timed out.')),
       Math.max(1, timeoutMs)
     );
-    promise.then(finish, () => finish(undefined as T));
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error: unknown) => {
+        clearTimeout(timer);
+        reject(error);
+      }
+    );
   });
 }
 
@@ -62,18 +78,19 @@ export function createBackgroundTranslationService(
   options: BackgroundTranslationServiceOptions
 ): TranslationService &
   ContextualTranslationAdapter &
+  DetailedContextualTranslationAdapter &
   RefreshableTranslationAdapter {
   const timeoutMs = options.timeoutMs ?? DEFAULT_CONTENT_TIMEOUT_MS;
   const requestId = options.requestId ?? defaultRequestIdFactory();
   const sessionResults = new Map<string, string>();
 
-  async function translateBatch(
+  async function translateBatchDetailed(
     texts: string[],
     purpose: ProtocolTranslationPurpose,
     context: TranslationContext
-  ): Promise<string[]> {
+  ): Promise<DetailedTranslationResult> {
     if (texts.length === 0) {
-      return [];
+      return { translations: [] };
     }
 
     const results = new Array<string>(texts.length);
@@ -92,7 +109,7 @@ export function createBackgroundTranslationService(
     }
 
     if (missing.size === 0) {
-      return results;
+      return { translations: results };
     }
 
     const missingEntries = Array.from(missing.entries());
@@ -106,24 +123,34 @@ export function createBackgroundTranslationService(
 
     let translated: string[] | undefined;
     let cacheable = false;
+    let errorCode: TranslateFailureCode | undefined;
     try {
       const response = await withTimeout(options.sendMessage(request), timeoutMs);
-      const decoded = decodeTranslateResponse(response);
-      if (
-        decoded !== undefined &&
-        decoded.requestId === request.requestId &&
-        decoded.purpose === request.purpose &&
-        decoded.translations.length === request.texts.length
-      ) {
-        if (decoded.ok) {
-          translated = decoded.translations;
-          cacheable = true;
+      if (response === undefined) {
+        errorCode = 'provider-timeout';
+      } else {
+        const decoded = decodeTranslateResponse(response);
+        if (
+          decoded !== undefined &&
+          decoded.requestId === request.requestId &&
+          decoded.purpose === request.purpose &&
+          decoded.translations.length === request.texts.length
+        ) {
+          if (decoded.ok) {
+            translated = decoded.translations;
+            cacheable = true;
+          } else {
+            translated = [...request.texts];
+            errorCode = decoded.error.code;
+          }
         } else {
-          translated = [...request.texts];
+          errorCode = 'invalid-response';
         }
       }
-    } catch {
-      translated = undefined;
+    } catch (error) {
+      errorCode = error instanceof ContentTranslationTimeoutError
+        ? 'provider-timeout'
+        : 'provider-failure';
     }
 
     const resolved = translated ?? request.texts;
@@ -138,7 +165,18 @@ export function createBackgroundTranslationService(
       }
     }
 
-    return results;
+    return {
+      translations: results,
+      ...(errorCode === undefined ? {} : { errorCode })
+    };
+  }
+
+  async function translateBatch(
+    texts: string[],
+    purpose: ProtocolTranslationPurpose,
+    context: TranslationContext
+  ): Promise<string[]> {
+    return (await translateBatchDetailed(texts, purpose, context)).translations;
   }
 
   return {
@@ -150,6 +188,9 @@ export function createBackgroundTranslationService(
     },
     translateWithContext(texts, context, purpose) {
       return translateBatch(texts, purpose, context);
+    },
+    translateWithContextDetailed(texts, context, purpose) {
+      return translateBatchDetailed(texts, purpose, context);
     },
     clearSessionCache() {
       sessionResults.clear();

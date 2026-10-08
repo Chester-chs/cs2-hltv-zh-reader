@@ -54,7 +54,11 @@ const extensionSettingKeys = new Set([
   'baseURL',
   'model',
   'apiKey',
-  'useJsonOutputMode'
+  'useJsonOutputMode',
+  'fallbackEnabled',
+  'fallbackBaseURL',
+  'fallbackModel',
+  'fallbackApiKey'
 ]);
 
 function sameDiagnostic(

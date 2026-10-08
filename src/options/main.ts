@@ -28,6 +28,10 @@ const baseURLInput = document.querySelector<HTMLInputElement>('#base-url')!;
 const modelInput = document.querySelector<HTMLInputElement>('#model')!;
 const apiKeyInput = document.querySelector<HTMLInputElement>('#api-key')!;
 const jsonOutputInput = document.querySelector<HTMLInputElement>('#json-output')!;
+const fallbackEnabledInput = document.querySelector<HTMLInputElement>('#fallback-enabled')!;
+const fallbackBaseURLInput = document.querySelector<HTMLInputElement>('#fallback-base-url')!;
+const fallbackModelInput = document.querySelector<HTMLInputElement>('#fallback-model')!;
+const fallbackApiKeyInput = document.querySelector<HTMLInputElement>('#fallback-api-key')!;
 const permissionStatus = document.querySelector<HTMLParagraphElement>('#permission-status')!;
 const authorizeButton = document.querySelector<HTMLButtonElement>('#authorize')!;
 const statusLine = document.querySelector<HTMLParagraphElement>('#status')!;
@@ -38,6 +42,8 @@ const toggleKeyButton = document.querySelector<HTMLButtonElement>('#toggle-key')
 const cacheStore = createIndexedDbCacheStore();
 
 let permissionCheckId = 0;
+let enabledDirty = false;
+let modeDirty = false;
 
 function readDraft(): ExtensionSettings {
   return {
@@ -47,7 +53,11 @@ function readDraft(): ExtensionSettings {
     baseURL: baseURLInput.value.trim(),
     model: modelInput.value.trim(),
     apiKey: apiKeyInput.value,
-    useJsonOutputMode: jsonOutputInput.checked
+    useJsonOutputMode: jsonOutputInput.checked,
+    fallbackEnabled: fallbackEnabledInput.checked,
+    fallbackBaseURL: fallbackBaseURLInput.value.trim(),
+    fallbackModel: fallbackModelInput.value.trim(),
+    fallbackApiKey: fallbackApiKeyInput.value
   };
 }
 
@@ -60,6 +70,10 @@ function renderSettings(settings: ExtensionSettings): void {
   modelInput.value = settings.model;
   apiKeyInput.value = settings.apiKey;
   jsonOutputInput.checked = settings.useJsonOutputMode;
+  fallbackEnabledInput.checked = settings.fallbackEnabled === true;
+  fallbackBaseURLInput.value = settings.fallbackBaseURL ?? '';
+  fallbackModelInput.value = settings.fallbackModel ?? '';
+  fallbackApiKeyInput.value = settings.fallbackApiKey ?? '';
 }
 
 function missingPermissionText(origin: string): string {
@@ -121,6 +135,12 @@ function applyPreset(): void {
 
 presetInput.addEventListener('change', applyPreset);
 baseURLInput.addEventListener('input', () => void refreshPermissionStatus());
+enabledInput.addEventListener('change', () => {
+  enabledDirty = true;
+});
+modeInput.addEventListener('change', () => {
+  modeDirty = true;
+});
 
 toggleKeyButton.addEventListener('click', () => {
   const show = apiKeyInput.type === 'password';
@@ -134,6 +154,7 @@ authorizeButton.addEventListener('click', async () => {
   authorizeButton.disabled = false;
   if (result.state === 'granted') {
     statusLine.textContent = `已授权 ${result.origin}。`;
+    await storage.set({ permissionRevision: Date.now() });
   } else if (result.state === 'denied' && result.origin !== undefined) {
     statusLine.textContent = missingPermissionText(result.origin);
   } else {
@@ -147,11 +168,31 @@ document.querySelector<HTMLFormElement>('#settings-form')!.addEventListener(
   async (event) => {
     event.preventDefault();
     saveButton.disabled = true;
-    const result = await saveOptionsSettings(readDraft(), storage, permissions);
+    const draft = readDraft();
+    let latest = draft;
+    try {
+      latest = await loadSettings(storage);
+    } catch {
+      // The draft remains the safest fallback if storage is temporarily unavailable.
+    }
+    const result = await saveOptionsSettings({
+      ...draft,
+      enabled: enabledDirty ? draft.enabled : latest.enabled,
+      mode: modeDirty ? draft.mode : latest.mode
+    }, storage, permissions);
     saveButton.disabled = false;
 
     if (result.ok) {
       statusLine.textContent = '设置已保存。';
+      enabledDirty = false;
+      modeDirty = false;
+      await storage.set({ permissionRevision: Date.now() });
+      if (fallbackEnabledInput.checked && fallbackBaseURLInput.value.trim().length > 0) {
+        const fallbackPermission = await authorizeProviderOrigin(fallbackBaseURLInput.value, permissions);
+        if (fallbackPermission.state !== 'granted') {
+          statusLine.textContent = '主服务已保存，但备用服务商域名尚未授权。';
+        }
+      }
       await refreshPermissionStatus();
       return;
     }

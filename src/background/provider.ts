@@ -6,7 +6,7 @@ import {
   type TranslationProvider
 } from '../core/translate/index.ts';
 import type { ExtensionSettings } from '../shared/settings.ts';
-import { DEFAULT_BACKGROUND_TIMEOUT_MS } from './translation-handler.ts';
+export const DEFAULT_PROVIDER_TIMEOUT_MS = 25000;
 
 export interface BackgroundProviderFactoryOptions {
   timeoutMs?: number;
@@ -32,7 +32,7 @@ export function createBackgroundProviderFactory(
   options: BackgroundProviderFactoryOptions = {}
 ): (settings: ExtensionSettings) => TranslationProvider {
   const transport = options.transport ?? { send: fetchChatCompletions };
-  const timeoutMs = options.timeoutMs ?? DEFAULT_BACKGROUND_TIMEOUT_MS;
+  const timeoutMs = options.timeoutMs ?? DEFAULT_PROVIDER_TIMEOUT_MS;
 
   return (settings) =>
     createOpenAICompatibleProvider({

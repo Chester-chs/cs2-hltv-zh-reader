@@ -1,0 +1,179 @@
+:root {
+  color-scheme: light dark;
+  font: 15px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Microsoft YaHei", sans-serif;
+  background: Canvas;
+  color: CanvasText;
+}
+
+body {
+  margin: 0;
+  min-width: 360px;
+  background: color-mix(in srgb, CanvasText 5%, Canvas);
+}
+
+main {
+  width: min(900px, calc(100% - 40px));
+  margin: 0 auto;
+  padding: 48px 0 64px;
+}
+
+.page-header,
+.filters {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.page-header {
+  margin-bottom: 28px;
+}
+
+.eyebrow,
+h1,
+#summary {
+  margin: 0;
+}
+
+.eyebrow {
+  color: GrayText;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+
+h1 {
+  margin-top: 5px;
+  font-size: clamp(28px, 5vw, 40px);
+  letter-spacing: -0.04em;
+}
+
+#summary {
+  margin-top: 6px;
+  color: GrayText;
+}
+
+button {
+  min-height: 36px;
+  padding: 0 15px;
+  border: 1px solid color-mix(in srgb, CanvasText 18%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, Canvas 92%, CanvasText 8%);
+  color: CanvasText;
+  font: inherit;
+  cursor: pointer;
+}
+
+button:hover {
+  background: color-mix(in srgb, Highlight 12%, Canvas);
+}
+
+button:focus-visible {
+  outline: 2px solid Highlight;
+  outline-offset: 3px;
+}
+
+.filters {
+  justify-content: flex-start;
+  margin-bottom: 14px;
+}
+
+.filter.active {
+  border-color: Highlight;
+  background: Highlight;
+  color: HighlightText;
+}
+
+.quiet {
+  color: Highlight;
+}
+
+.danger {
+  margin-left: auto;
+  color: #b42318;
+}
+
+.entries-panel {
+  padding: 18px;
+  border: 1px solid color-mix(in srgb, CanvasText 14%, transparent);
+  border-radius: 18px;
+  background: color-mix(in srgb, Canvas 96%, Highlight 4%);
+  box-shadow: 0 12px 32px color-mix(in srgb, CanvasText 12%, transparent);
+}
+
+.entries {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.entry {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 14px;
+  align-items: start;
+  padding: 15px 2px;
+  border-bottom: 1px solid color-mix(in srgb, CanvasText 10%, transparent);
+}
+
+.entry:last-child {
+  border-bottom: 0;
+}
+
+.entry-query,
+.entry-translation,
+.entry-meta {
+  display: block;
+}
+
+.entry-query {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.entry-translation {
+  margin-top: 5px;
+  color: GrayText;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.entry-meta {
+  margin-top: 5px;
+  color: GrayText;
+  font-size: 12px;
+}
+
+.entry-favorite {
+  width: 38px;
+  min-height: 38px;
+  padding: 0;
+  color: #b8860b;
+  font-size: 21px;
+}
+
+.empty {
+  padding: 42px 12px;
+  color: GrayText;
+  text-align: center;
+}
+
+@media (max-width: 560px) {
+  main {
+    width: min(100% - 24px, 900px);
+    padding-top: 28px;
+  }
+
+  .page-header {
+    align-items: flex-start;
+  }
+
+  .filters {
+    flex-wrap: wrap;
+  }
+
+  .danger {
+    margin-left: 0;
+  }
+}

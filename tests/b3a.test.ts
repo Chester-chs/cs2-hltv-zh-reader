@@ -25,6 +25,7 @@ import {
 } from '../src/background/protocol.ts';
 import {
   createBackgroundMessageHandler,
+  DEFAULT_BACKGROUND_TIMEOUT_MS,
   type BackgroundTranslationRunner
 } from '../src/background/translation-handler.ts';
 import {
@@ -46,7 +47,7 @@ import {
   loadContentSettings,
   type ContentSettingsStorage
 } from '../src/content/settings.ts';
-import { createBackgroundTranslationService } from '../src/content/background-translator.ts';
+import { createBackgroundTranslationService, DEFAULT_CONTENT_TIMEOUT_MS } from '../src/content/background-translator.ts';
 import { applyContentSettingsChanges } from '../src/content/settings-sync.ts';
 import { DEFAULT_SETTINGS as SHARED_DEFAULT_SETTINGS } from '../src/shared/settings.ts';
 import { parseProviderBaseURL } from '../src/shared/provider-url.ts';
@@ -173,6 +174,25 @@ test('background glossary loader consumes injected packaged text at runtime', as
   assert.deepEqual(glossary.entries[0]?.target, '秋季');
 });
 
+test('translation defaults allow page requests more time than the old five-second cutoff', async () => {
+  assert.equal(DEFAULT_BACKGROUND_TIMEOUT_MS, 30000);
+  assert.equal(DEFAULT_CONTENT_TIMEOUT_MS, 35000);
+  let providerTimeout = 0;
+  const factory = createBackgroundProviderFactory({
+    transport: {
+      async send(request) {
+        providerTimeout = request.timeoutMs;
+        return { status: 200, json: async () => ({ choices: [{ message: { content: '{"translations":["测试译文"]}' } }] }) };
+      }
+    }
+  });
+  const result = await factory(DEFAULT_SETTINGS).translate({
+    texts: ['A long English sentence'], protectedFragments: [[]], purposes: ['plain']
+  });
+  assert.equal(result.ok, true);
+  assert.equal(providerTimeout, 25000);
+});
+
 test('content translator does not send a second message for a same-session hit', async () => {
   let messageCount = 0;
   const translator = createBackgroundTranslationService({
@@ -262,6 +282,37 @@ test('background handler returns original text for provider failure', async () =
   assert.deepEqual(response?.translations, request.texts);
 });
 
+test('dictionary and sentence selection remain available when page translation is disabled', async () => {
+  const requests: TranslateRequest[] = [];
+  const handler = createBackgroundMessageHandler({
+    storage: createStorage({ enabled: false, mode: 'A' }),
+    runner: {
+      async translate(texts, purpose) {
+        requests.push({
+          type: 'hltv-zh-translate-request',
+          requestId: purpose,
+          purpose,
+          texts
+        });
+        return { ok: true, translations: texts.map(() => '中文结果') };
+      }
+    },
+    hasProviderPermission: async () => true
+  });
+
+  for (const purpose of ['dictionary', 'sentence'] as const) {
+    const response = decodeTranslateResponse(await handler({
+      type: 'hltv-zh-translate-request',
+      requestId: purpose,
+      purpose,
+      context: purpose === 'dictionary' ? 'structured' : 'prose',
+      texts: [purpose]
+    }));
+    assert.deepEqual(response?.ok, true);
+  }
+  assert.deepEqual(requests.map((request) => request.purpose), ['dictionary', 'sentence']);
+});
+
 test('background handler turns a sleeping runner into an explicit timeout fallback', async () => {
   const runner: BackgroundTranslationRunner = {
     translate: () => new Promise<never>(() => {})
@@ -322,7 +373,7 @@ test('settings loader uses shared defaults and content reads only non-secret set
   const content = await loadContentSettings({
     async get(keys) {
       requestedKeys = keys;
-      return { enabled: values.enabled, mode: values.mode };
+      return { enabled: values.enabled, mode: values.mode, theme: 'system', fontScale: 1 };
     }
   });
 
@@ -331,8 +382,8 @@ test('settings loader uses shared defaults and content reads only non-secret set
     providerPreset: 'custom',
     useJsonOutputMode: true
   });
-  assert.deepEqual(content, { enabled: false, mode: 'B' });
-  assert.deepEqual(requestedKeys, ['enabled', 'mode']);
+  assert.deepEqual(content, { enabled: false, mode: 'B', theme: 'system', fontScale: 1 });
+  assert.deepEqual(requestedKeys, ['enabled', 'mode', 'theme', 'fontScale']);
   assert.equal(DEFAULT_SETTINGS.mode, 'A');
 });
 
@@ -481,6 +532,89 @@ test('background checks host permission before calling the translation runner', 
   assert.equal(runnerCalls, 0);
   assert.equal(response?.ok, false);
   assert.deepEqual(response?.translations, request.texts);
+});
+
+test('background keeps glossary-covered labels available without provider permission', async () => {
+  let providerCalls = 0;
+  const runner = createCoreBackgroundTranslationRunner({
+    glossary: {
+      version: 1,
+      entries: [
+        { term: 'News', target: '新闻', keep_as_is: false, category: 'ui' },
+        { term: 'Matches', target: '比赛', keep_as_is: false, category: 'ui' }
+      ]
+    },
+    cacheStore: {
+      async get() { return undefined; },
+      async set() {}
+    },
+    providerFactory: () => ({
+      async translate(request) {
+        providerCalls += 1;
+        return { ok: true, translations: request.texts.map(() => '模型译文') };
+      }
+    })
+  });
+  const handler = createBackgroundMessageHandler({
+    storage: createStorage({ ...DEFAULT_SETTINGS }),
+    runner,
+    async hasProviderPermission() {
+      return false;
+    }
+  });
+  const request: TranslateRequest = {
+    type: 'hltv-zh-translate-request',
+    requestId: 'offline-ui-without-permission',
+    purpose: 'plain',
+    context: 'structured',
+    texts: ['News', 'Matches', 'A long article title needing a provider']
+  };
+
+  const response = decodeTranslateResponse(await handler(request));
+
+  assert.equal(response?.ok, true);
+  assert.deepEqual(response?.translations, [
+    '新闻',
+    '比赛',
+    'A long article title needing a provider'
+  ]);
+  assert.equal(providerCalls, 0);
+});
+
+test('background preserves offline glossary labels when provider translation fails', async () => {
+  let providerInput: string[] = [];
+  const handler = createBackgroundMessageHandler({
+    storage: createStorage({ ...DEFAULT_SETTINGS }),
+    runner: {
+      async translateGlossaryCovered(texts: string[]) {
+        return texts.map((text) => text === 'News' ? '新闻' : undefined);
+      },
+      async translate(texts: string[]) {
+        providerInput = [...texts];
+        return {
+          ok: false as const,
+          translations: [...texts],
+          error: { code: 'provider-failure' as const, message: 'Provider unavailable.' }
+        };
+      }
+    },
+    async hasProviderPermission() {
+      return true;
+    }
+  });
+  const request: TranslateRequest = {
+    type: 'hltv-zh-translate-request',
+    requestId: 'offline-ui-with-provider-failure',
+    purpose: 'plain',
+    context: 'structured',
+    texts: ['News', 'A long article headline']
+  };
+
+  const response = decodeTranslateResponse(await handler(request));
+
+  assert.equal(response?.ok, true);
+  assert.deepEqual(response?.translations, ['新闻', 'A long article headline']);
+  assert.deepEqual(providerInput, ['A long article headline']);
 });
 
 test('provider permission diagnostics follow startup, settings, grant, and revocation state', async () => {
@@ -1011,6 +1145,94 @@ test('background cache hit still receives one message but does not call the prov
   );
   assert.deepEqual(result, { ok: true, translations: [cached] });
   assert.equal(providerCalls, 0);
+});
+
+test('background runner deduplicates concurrent identical requests', async () => {
+  let providerCalls = 0;
+  const runner = createCoreBackgroundTranslationRunner({
+    glossary: { version: 1, entries: [] },
+    cacheStore: {
+      async get() { return undefined; },
+      async set() {}
+    },
+    providerFactory: () => ({
+      async translate(request) {
+        providerCalls += 1;
+        await new Promise<void>((resolve) => setTimeout(resolve, 10));
+        return { ok: true as const, translations: request.texts.map((text) => `译文:${text}`) };
+      }
+    })
+  });
+  const original = 'A long English sentence for concurrent runner deduplication';
+
+  const [first, second] = await Promise.all([
+    runner.translate([original], 'plain', DEFAULT_SETTINGS),
+    runner.translate([original], 'plain', DEFAULT_SETTINGS)
+  ]);
+
+  assert.deepEqual(first, { ok: true, translations: [`译文:${original}`] });
+  assert.deepEqual(second, first);
+  assert.equal(providerCalls, 1);
+});
+
+test('background runner retries a failed primary provider with the configured fallback', async () => {
+  const calls: string[] = [];
+  const runner = createCoreBackgroundTranslationRunner({
+    glossary: { version: 1, entries: [] },
+    cacheStore: {
+      async get() { return undefined; },
+      async set() {}
+    },
+    providerFactory: (settings) => ({
+      async translate(request) {
+        calls.push(settings.baseURL);
+        if (settings.baseURL === 'https://primary.example') {
+          return { ok: false, error: { code: 'transport-error', message: 'primary down' } };
+        }
+        return { ok: true, translations: request.texts.map(() => '备用译文') };
+      }
+    })
+  });
+
+  const result = await runner.translate([
+    'A sentence needs translation.'
+  ], 'sentence', {
+    ...SHARED_DEFAULT_SETTINGS,
+    baseURL: 'https://primary.example',
+    fallbackEnabled: true,
+    fallbackBaseURL: 'https://fallback.example',
+    fallbackModel: 'fallback-model',
+    fallbackApiKey: 'fallback-key'
+  }, 'prose');
+
+  assert.deepEqual(result, { ok: true, translations: ['备用译文'] });
+  assert.deepEqual(calls, ['https://primary.example', 'https://fallback.example']);
+});
+
+test('background runner isolates cached translations when the model changes', async () => {
+  const cache = new Map<string, string>();
+  let providerCalls = 0;
+  const runner = createCoreBackgroundTranslationRunner({
+    glossary: { version: 1, entries: [] },
+    cacheStore: {
+      async get(key) { return cache.get(key); },
+      async set(key, value) { cache.set(key, value); }
+    },
+    providerFactory: (settings) => ({
+      async translate() {
+        providerCalls += 1;
+        return { ok: true as const, translations: [`${settings.model}:译文`] };
+      }
+    })
+  });
+  const original = 'A long English sentence for model cache isolation';
+
+  const first = await runner.translate([original], 'plain', { ...DEFAULT_SETTINGS, model: 'model-one' });
+  const second = await runner.translate([original], 'plain', { ...DEFAULT_SETTINGS, model: 'model-two' });
+
+  assert.deepEqual(first, { ok: true, translations: ['model-one:译文'] });
+  assert.deepEqual(second, { ok: true, translations: ['model-two:译文'] });
+  assert.equal(providerCalls, 2);
 });
 
 test('fake provider covers success, provider failure, invalid response, and never-resolve modes', async () => {

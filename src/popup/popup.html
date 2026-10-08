@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HLTV 中文阅读器</title>
+    <link rel="stylesheet" href="/popup.css" />
+  </head>
+  <body>
+    <main>
+      <header class="brand">
+        <span class="brand-mark" aria-hidden="true">HL</span>
+        <div>
+          <h1>HLTV 中文阅读器</h1>
+          <p>让赛事资讯读起来更轻松</p>
+        </div>
+      </header>
+
+      <section id="readiness" class="readiness" aria-live="polite">
+        <span id="readiness-mark" class="status-mark" aria-hidden="true"></span>
+        <div>
+          <strong id="readiness-title">正在读取设置</strong>
+          <p id="readiness-description">请稍候…</p>
+        </div>
+      </section>
+
+      <label class="toggle-row" for="enabled">
+        <span>
+          <strong>启用页面翻译</strong>
+          <small>设置会同步到已打开的 HLTV 页面</small>
+        </span>
+        <input id="enabled" type="checkbox" role="switch" disabled />
+      </label>
+
+      <fieldset id="mode-options" disabled>
+        <legend>显示方式</legend>
+        <label class="mode-option">
+          <input type="radio" name="mode" value="A" />
+          <span><strong>完全中文</strong><small>用中文替换可翻译内容</small></span>
+        </label>
+        <label class="mode-option">
+          <input type="radio" name="mode" value="B" />
+          <span><strong>双语对照</strong><small>保留原文并显示中文</small></span>
+        </label>
+      </fieldset>
+
+      <button id="open-history" type="button" class="secondary-action">打开词典历史</button>
+      <button id="open-settings" type="button">服务商与首次设置</button>
+      <p id="action-status" class="action-status" role="status" aria-live="polite"></p>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

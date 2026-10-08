@@ -56,6 +56,11 @@ function normalizeSettings(values: Record<string, unknown>): ExtensionSettings {
   const model =
     storedModel.trim().length === 0 ? DEFAULT_SETTINGS.model : storedModel;
 
+  const fallbackBaseURL = readString(values.fallbackBaseURL, '').trim();
+  const fallbackModel = readString(values.fallbackModel, '').trim();
+  const fallbackApiKey = readString(values.fallbackApiKey, '');
+  const hasFallback = values.fallbackEnabled === true || fallbackBaseURL.length > 0 || fallbackModel.length > 0 || fallbackApiKey.length > 0;
+
   return {
     enabled: readBoolean(values.enabled, DEFAULT_SETTINGS.enabled),
     mode: readMode(values.mode),
@@ -66,7 +71,15 @@ function normalizeSettings(values: Record<string, unknown>): ExtensionSettings {
     useJsonOutputMode: readBoolean(
       values.useJsonOutputMode,
       DEFAULT_SETTINGS.useJsonOutputMode
-    )
+    ),
+    ...(hasFallback
+      ? {
+          fallbackEnabled: readBoolean(values.fallbackEnabled, false),
+          fallbackBaseURL,
+          fallbackModel,
+          fallbackApiKey
+        }
+      : {})
   };
 }
 

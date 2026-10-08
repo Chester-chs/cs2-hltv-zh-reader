@@ -14,7 +14,7 @@ const { test } = (await import(nodeTestModuleName)) as {
   test(name: string, callback: () => void | Promise<void>): void;
 };
 
-import { classifyText, createOpenAICompatibleProvider, createTranslationService, findKeepAsIsMatches, hashText, isEntirelyKeepAsIs, lookupEntries, parseGlossaryJson, validateTranslation, type CacheStore, type ChatCompletionsTransport, type ChatCompletionsTransportRequest, type GlossaryDocument, type ProviderRequest, type ProviderResult, type TranslationContext, type TranslationProvider } from '../src/core/translate/index.ts';
+import { classifyText, createOpenAICompatibleProvider, createTranslationService, findKeepAsIsMatches, hashText, isEntirelyKeepAsIs, lookupEntries, parseGlossaryJson, translateFixedUiTexts, translateGlossaryCoveredText, validateTranslation, type CacheStore, type ChatCompletionsTransport, type ChatCompletionsTransportRequest, type GlossaryDocument, type ProviderRequest, type ProviderResult, type TranslationContext, type TranslationProvider } from '../src/core/translate/index.ts';
 
 const glossary: GlossaryDocument = {
   version: 1,
@@ -299,6 +299,21 @@ test('structured context classifies short English page labels as translatable', 
   }
 });
 
+test('dictionary purpose sends a short selected word to the provider and bypasses glossary labels', async () => {
+  const { provider, requests } = createMockProvider(async (request) => ({
+    ok: true,
+    translations: request.texts.map(() => '动词：让……坐替补席；形容词：被安排替补')
+  }));
+  const service = createService(provider);
+
+  const result = await service.translateDictionary?.(['Live']);
+
+  assert.deepEqual(result, ['动词：让……坐替补席；形容词：被安排替补']);
+  assert.equal(requests.length, 1);
+  assert.deepEqual(requests[0]?.texts, ['Live']);
+  assert.deepEqual(requests[0]?.purposes, ['dictionary']);
+});
+
 test('prose uses a medium threshold while comments keep the conservative default', () => {
   assert.equal(classifyText('Thank you', glossary, 'prose').shouldTranslate, true);
   assert.equal(classifyText('Thank you', glossary, 'comment').shouldTranslate, false);
@@ -389,6 +404,190 @@ test('real page glossary values translate deterministically without classificati
   assert.deepEqual(uncertain, []);
 });
 
+test('observed static HLTV interface labels translate from the production glossary without a provider', async () => {
+  const productionGlossary = await loadProductionGlossary();
+  const { provider, requests } = createMockProvider(async () => ({
+    ok: true,
+    translations: []
+  }));
+  const service = createTranslationService({
+    glossary: productionGlossary,
+    provider,
+    cacheStore: createMemoryCache(),
+    context: 'structured'
+  });
+  const input = [
+    'News',
+    'Matches',
+    'Results',
+    'Events',
+    'Players',
+    'Stats',
+    'Forum',
+    'Media',
+    'Betting',
+    'Live',
+    'Fantasy',
+    'Major',
+    'Live Counter-Strike matches',
+    'Upcoming Counter-Strike matches',
+    'Match filters',
+    'Starred matches only',
+    'Ranked',
+    'Unranked',
+    'Win %',
+    'Pick %',
+    'Ban %',
+    'Lineups',
+    'Matches, past 3 months',
+    'Head to head',
+    'VRS forecast',
+    'Ongoing events',
+    'Upcoming events',
+    'Regional rankings',
+    'KAST',
+    'Player of the week',
+    'Opening duels won',
+    'Sign in',
+    'MINIGAME',
+    'Play',
+    'Complete ranking',
+    'Event calendar',
+    'Counter-Strike Players',
+    'FILTERS',
+    'Stars',
+    'Time',
+    'Match type',
+    'Map',
+    'Event',
+    'Valve ranked',
+    'Fantasy Fall season 2026',
+    'Partner Games',
+    'PRIZES',
+    'ABOUT FALL SEASON 2026',
+    'POINTS SYSTEM',
+    'Fullscreen',
+    'Theater',
+    'RANKING',
+    'FPL RANKING',
+    'GALLERIES',
+    'RECENT ACTIVITY',
+    'TOP 30 TRANSFERS',
+    'Download the HLTV app',
+    'HLTV Community t-shirt and sweatshirt available now',
+    'Optimized to keep you up to date on the go',
+    '18+ Bet Responsibly'
+  ];
+
+  assert.deepEqual(await service.translate(input), [
+    '新闻',
+    '比赛',
+    '赛果',
+    '赛事',
+    '选手',
+    '数据',
+    '论坛',
+    '媒体',
+    '竞猜',
+    '直播',
+    '梦幻电竞',
+    'Major 赛事',
+    '正在进行的 Counter-Strike 比赛',
+    '即将开始的 Counter-Strike 比赛',
+    '比赛筛选',
+    '仅显示已收藏的比赛',
+    '有排名',
+    '无排名',
+    '胜率',
+    '选图率',
+    '禁用率',
+    '阵容',
+    '近 3 个月的比赛',
+    '历史交锋',
+    'VRS 预测',
+    '进行中赛事',
+    '即将开始赛事',
+    '地区排名',
+    'KAST',
+    '本周最佳选手',
+    '首杀对决胜率',
+    '登录',
+    '小游戏',
+    '开始',
+    '查看完整排名',
+    '赛事日历',
+    'Counter-Strike 选手',
+    '筛选',
+    '星级',
+    '时间',
+    '比赛类型',
+    '地图',
+    '赛事',
+    'Valve 排名',
+    '梦幻电竞 2026 秋季赛',
+    '合作游戏',
+    '奖励',
+    '关于 2026 秋季赛',
+    '积分规则',
+    '全屏',
+    '影院模式',
+    '排名',
+    'FPL 排名',
+    '图库',
+    '最新动态',
+    '近期前30转会',
+    '下载 HLTV 应用',
+    'HLTV 社区 T 恤和卫衣现已发售',
+    '随时掌握最新动态',
+    '18+ 理性投注'
+  ]);
+  assert.deepEqual(requests, []);
+});
+
+test('event-name validation ignores UI terms but still requires season terminology', async () => {
+  const productionGlossary = await loadProductionGlossary();
+  const result = validateTranslation(
+    'Stake Ranked Fall 2026',
+    'Stake Ranked 秋季 2026',
+    [],
+    'event-name',
+    productionGlossary
+  );
+
+  assert.deepEqual(result, { ok: true });
+  assert.deepEqual(
+    validateTranslation(
+      'Stake Ranked Fall 2026',
+      'Stake Ranked 2026',
+      [],
+      'event-name',
+      productionGlossary
+    ),
+    {
+      ok: false,
+      code: 'glossary-target-missing',
+      message: 'Glossary target is missing: 秋季'
+    }
+  );
+});
+
+test('event-name translations do not use UI-only glossary shortcuts', async () => {
+  const productionGlossary = await loadProductionGlossary();
+  const { provider, requests } = createMockProvider((request) => ({
+    ok: true,
+    translations: request.texts.map(() => '排位赛')
+  }));
+  const service = createTranslationService({
+    glossary: productionGlossary,
+    provider,
+    cacheStore: createMemoryCache(),
+    context: 'structured'
+  });
+
+  assert.deepEqual(await service.translateEventNames(['Ranked']), ['排位赛']);
+  assert.deepEqual(requests.map((request) => request.texts), [['Ranked']]);
+});
+
 test('real short comment samples use the conservative uncertain path', () => {
   const samples = [
     'Congratulations mouz',
@@ -464,6 +663,24 @@ test('provider timeout returns the original text', async () => {
   const source = 'This is a full English sentence';
 
   assert.deepEqual(await service.translate([source]), [source]);
+});
+
+test('provider body parsing is covered by the provider timeout', async () => {
+  const transport: ChatCompletionsTransport = {
+    send: async () => ({
+      status: 200,
+      json: () => new Promise<never>(() => undefined)
+    })
+  };
+  const provider = createOpenAICompatibleProvider(openAIConfig(transport, 5));
+  const service = createService(provider);
+  const source = 'This is a full English sentence with a response body';
+
+  const result = await Promise.race([
+    service.translate([source]),
+    new Promise<string[]>((resolve) => setTimeout(() => resolve(['timed out']), 50))
+  ]);
+  assert.deepEqual(result, [source]);
 });
 
 test('provider transport error returns the original text', async () => {
@@ -556,6 +773,80 @@ test('OpenAI-compatible provider lists protected fragments in its prompt', async
     text: 'StarLadder StarSeries Fall 2026',
     protected_fragments: ['StarLadder StarSeries']
   });
+});
+
+test('repeated protected fragments keep their original order', () => {
+  assert.deepEqual(
+    validateTranslation(
+      'HLTV spoke with Valve about HLTV rankings',
+      'HLTV 与 Valve 讨论了 HLTV 排名',
+      ['HLTV', 'Valve', 'HLTV'],
+      'plain',
+      glossary
+    ),
+    { ok: true }
+  );
+});
+
+test('blank provider translations are rejected and never cached', async () => {
+  const writes: string[] = [];
+  const { provider } = createMockProvider(async () => ({
+    ok: true,
+    translations: ['   ']
+  }));
+  const service = createService(provider, {
+    async get() { return undefined; },
+    async set(_key, value) { writes.push(value); }
+  });
+
+  const source = 'This is a full English sentence';
+  assert.deepEqual(await service.translate([source]), [source]);
+  assert.deepEqual(writes, []);
+});
+
+test('hash collisions do not reuse another source translation', async () => {
+  const { provider, requests } = createMockProvider(async (request) => ({
+    ok: true,
+    translations: request.texts.map((text) => `译文:${text}`)
+  }));
+  const service = createTranslationService({
+    glossary,
+    provider,
+    cacheStore: createMemoryCache(),
+    hash: () => 'collision'
+  });
+
+  const first = 'This is a full English sentence one';
+  const second = 'This is a full English sentence two';
+  assert.deepEqual(await service.translate([first]), [`译文:${first}`]);
+  assert.deepEqual(await service.translate([second]), [`译文:${second}`]);
+  assert.equal(requests.length, 2);
+});
+
+test('translation cache namespaces isolate provider models', async () => {
+  const cache = createMemoryCache();
+  const first = createTranslationService({
+    glossary,
+    provider: createMockProvider(async () => ({ ok: true, translations: ['模型一'] })).provider,
+    cacheStore: cache,
+    cacheNamespace: 'model-one'
+  });
+  const second = createTranslationService({
+    glossary,
+    provider: createMockProvider(async () => ({ ok: true, translations: ['模型二'] })).provider,
+    cacheStore: cache,
+    cacheNamespace: 'model-two'
+  });
+  const source = 'This is a full English sentence for model isolation';
+
+  assert.deepEqual(await first.translate([source]), ['模型一']);
+  assert.deepEqual(await second.translate([source]), ['模型二']);
+});
+
+test('diacritic player names are treated as identity text', () => {
+  const decision = classifyText('Buğra Arkın', glossary, 'prose');
+  assert.equal(decision.shouldTranslate, false);
+  assert.equal(decision.kind, 'uncertain');
 });
 
 test('provider adds v1 after a host or custom path prefix without duplicating it', async () => {
@@ -881,5 +1172,136 @@ test('legacy text-only cache entries are orphaned and purpose caches stay separa
   assert.equal(requests.length, 1);
   assert.deepEqual(requests[0]?.purposes, ['event-name']);
   assert.equal(values.get(legacyKey), legacyValue);
-  assert.deepEqual(writes, [`v2:event-name:${hashText(source)}`]);
+  assert.deepEqual(writes, [`v3:default:event-name:${encodeURIComponent(source)}`]);
+});
+
+test('statistics units translate after an identity without changing that identity or leaking scoped terms', async () => {
+  const production = await loadProductionGlossary();
+  assert.deepEqual(translateFixedUiTexts([
+    'Nikola Kovač • 29 years', '2334 maps', '24 rounds', 'NiKo', 'NiKo maps',
+    'GOOD', 'KAST', 'Unsupported English label'
+  ], production, ['ui', 'ui-stats']), [
+    'Nikola Kovač • 29 岁', '2334 地图', '24 回合', 'NiKo', 'NiKo maps',
+    '优秀', '回合贡献率', 'Unsupported English label'
+  ]);
+  assert.deepEqual(translateFixedUiTexts(['GOOD', 'Firepower'], production), ['GOOD', 'Firepower']);
+  assert.equal(translateGlossaryCoveredText('GOOD', production, 'plain'), undefined);
+  assert.deepEqual(validateTranslation('Good Fall 2026', 'Good 2026 秋季', [], 'event-name', production), { ok: true });
+});
+
+test('full statistics table labels and observed filters translate completely from scoped glossary entries', async () => {
+  const production = await loadProductionGlossary();
+  const labels: Array<[string, string]> = [
+    ["Statistics","数据统计"],
+    ["Total kills","总击杀数"],
+    ["Headshot %","爆头率"],
+    ["Total deaths","总死亡数"],
+    ["K/D Ratio","击杀/死亡比"],
+    ["Damage / Round","每回合平均伤害"],
+    ["Grenade dmg / Round","每回合投掷物伤害"],
+    ["Maps played","已打地图数"],
+    ["Rounds played","已打回合数"],
+    ["Kills / round","每回合击杀数"],
+    ["Assists / round","每回合助攻数"],
+    ["Deaths / round","每回合死亡数"],
+    ["Saved by teammate / round","每回合被队友救下次数"],
+    ["Saved teammates / round","每回合救下队友次数"],
+    ["Impact rating","影响力评分"],
+    ["Featured ratings","对阵强队评分"],
+    ["Eco-adjust stats","按经济差异调整数据"],
+    ["Avg.","平均"],
+    ["Deaths per round","每回合死亡数"],
+    ["Kills per round","每回合击杀数"],
+    ["Teammates","队友"],
+    ["Form in filter","筛选范围内状态"],
+    ["Maps in filter","筛选范围内地图数"],
+    ["Maps","地图"],
+    ["Majors","官方大赛"],
+    ["Big events","大型赛事"],
+    ["MVP events","设有最佳选手奖的赛事"],
+    ["LAN","线下赛事"],
+    ["Online","线上赛事"],
+    ["Last month","最近一个月"],
+    ["Last 3 months","最近 3 个月"],
+    ["Last 6 months","最近 6 个月"],
+    ["Last 12 months","最近 12 个月"],
+    ["Top 5","前 5 名"],
+    ["Top 10","前 10 名"],
+    ["Top 20","前 20 名"],
+    ["Top 30","前 30 名"],
+    ["Top 50","前 50 名"],
+    ["Event type","赛事类型"],
+    ["Best Of X","比赛赛制"],
+    ["Best of 1","一局定胜负"],
+    ["Best of 3","三局两胜"],
+    ["Best of 5","五局三胜"],
+    ["Grand final","总决赛"],
+    ["Playoffs","淘汰赛"],
+    ["Pre-playoff","淘汰赛前阶段"],
+    ["vs top 5 opponents","对阵前 5 名对手"],
+    ["vs top 10 opponents","对阵前 10 名对手"],
+    ["vs top 20 opponents","对阵前 20 名对手"],
+    ["vs top 30 opponents","对阵前 30 名对手"],
+    ["vs top 50 opponents","对阵前 50 名对手"],
+    ["Sides","阵营"],
+    ["CT","防守方"],
+    ["T","进攻方"],
+    ["全部 Sides","双方"],
+    ["CT 阵营","防守方"],
+    ["T 阵营","进攻方"],
+    ["Data from 2016 and onward only, be wary of your sample size.","数据仅包含 2016 年及之后的比赛，请注意样本量。"],
+    ["How many times a teammate killed the attacker that was damaging this player within 1 second of the last attack. Data from 2016 and onward only, be wary of your sample size.","队友在最后一次攻击后 1 秒内，击杀正在伤害该选手的敌人的次数。数据仅包含 2016 年及之后的比赛，请注意样本量。"],
+    ["How many times this player killed an opponent who was attacking a teammate, within 1 second of the last attack. Data from 2016 and onward only, be wary of your sample size.","该选手在最后一次攻击后 1 秒内，击杀正在攻击队友的敌人的次数。数据仅包含 2016 年及之后的比赛，请注意样本量。"],
+    ["Measures the impact made from multikills, opening kills, and clutches.","衡量多杀、首杀和残局带来的影响。"],
+    ["Search the stats section for teams, players and events, from here you can easily add them to your context.","搜索战队、选手和赛事，将它们加入当前统计范围。"]
+  ];
+  assert.deepEqual(
+    translateFixedUiTexts(labels.map(([source]) => source), production, ['ui', 'ui-stats']),
+    labels.map(([, translated]) => translated)
+  );
+  const untouched = ['donk', 'NiKo', 'FaZe', 'CT Player', 'T Player', '10292', '61.1%', '1.38', '2026-09-30', 'Unsupported English label'];
+  assert.deepEqual(translateFixedUiTexts(untouched, production, ['ui', 'ui-stats']), untouched);
+  assert.deepEqual(translateFixedUiTexts(['Statistics', 'CT', 'T', 'Total kills'], production), ['Statistics', 'CT', 'T', 'Total kills']);
+  assert.equal(translateGlossaryCoveredText('Impact rating', production, 'plain'), undefined);
+  assert.deepEqual(validateTranslation('Good Fall 2026', 'Good 2026 秋季', [], 'event-name', production), { ok: true });
+});
+
+test('navigation terminology is scoped to menus and excluded from provider glossary enforcement', async () => {
+  const production = await loadProductionGlossary();
+  assert.deepEqual(translateFixedUiTexts(['Retired Players', 'Archive', 'Counter-Strike', 'All', 'Maps'], production, ['ui', 'ui-navigation']),
+    ['退役选手', '历史赛事', '反恐精英', '全部', '地图']);
+  assert.deepEqual(translateFixedUiTexts(['Retired Players', 'Archive', 'Counter-Strike', 'All', 'Maps'], production),
+    ['Retired Players', 'Archive', 'Counter-Strike', 'All', 'Maps']);
+  for (const purpose of ['plain', 'event-name'] as const) {
+    assert.equal(translateGlossaryCoveredText('Retired Players', production, purpose), undefined);
+    assert.deepEqual(validateTranslation('Archive Fall 2026', 'Archive 2026 秋季', [], purpose, production), { ok: true });
+  }
+});
+
+test('observed transfer streaming and privacy labels translate locally while stream identities and values remain original', async () => {
+  const production = await loadProductionGlossary();
+  const labels: Array<[string, string]> = [
+    ["All transfers","查看全部转会"],
+    ["Now playing","正在直播"],
+    ["Top streams","热门直播"],
+    ["Casters","解说"],
+    ["Streamers","主播"],
+    ["Organizers","赛事主办方"],
+    ["viewers","观众"],
+    ["Update privacy preferences","更新隐私偏好"],
+    ["Timeline","时间线"],
+    ["Start date","开始日期"],
+    ["End date","结束日期"],
+    ["Add to context..","添加战队、选手或赛事"],
+    ["BENCH","替补席"],
+    ["No team","暂无战队"],
+    ["TOP 30 TRANSFERS","近期前30转会"]
+  ];
+  assert.deepEqual(
+    translateFixedUiTexts(labels.map(([source]) => source), production),
+    labels.map(([, translated]) => translated)
+  );
+  assert.deepEqual(translateFixedUiTexts(['1500 viewers', 'PlayerOne • 1500 viewers', 'PlayerOne viewers', 'Nuke', 'CS2'], production), [
+    '1500 观众', 'PlayerOne • 1500 观众', 'PlayerOne viewers', 'Nuke', 'CS2'
+  ]);
 });

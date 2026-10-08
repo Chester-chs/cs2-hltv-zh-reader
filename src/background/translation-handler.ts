@@ -26,6 +26,10 @@ export interface BackgroundTranslationRunner {
     settings: ExtensionSettings,
     context?: TranslationContext
   ): Promise<BackgroundTranslationResult>;
+  translateGlossaryCovered?(
+    texts: string[],
+    purpose: TranslationPurpose
+  ): Promise<Array<string | undefined>>;
 }
 
 export interface BackgroundMessageHandlerOptions {
@@ -41,7 +45,7 @@ export interface RuntimeMessageEvent {
   ): void;
 }
 
-export const DEFAULT_BACKGROUND_TIMEOUT_MS = 5000;
+export const DEFAULT_BACKGROUND_TIMEOUT_MS = 30000;
 
 class OperationTimeoutError extends Error {}
 
@@ -157,8 +161,40 @@ export function createBackgroundMessageHandler(
       );
     }
 
-    if (!settings.enabled) {
+    if (!settings.enabled && request.purpose !== 'dictionary' && request.purpose !== 'sentence') {
       return createFailure(request, 'disabled', 'Translation is disabled.');
+    }
+
+    let glossaryTranslations: Array<string | undefined> | undefined;
+    if (request.purpose !== 'dictionary' && options.runner.translateGlossaryCovered !== undefined) {
+      try {
+        const candidate = await options.runner.translateGlossaryCovered(
+          request.texts,
+          request.purpose
+        );
+        if (
+          candidate.length === request.texts.length &&
+          candidate.every(
+            (translation) =>
+              translation === undefined || typeof translation === 'string'
+          )
+        ) {
+          glossaryTranslations = candidate;
+        }
+      } catch {
+        glossaryTranslations = undefined;
+      }
+    }
+
+    const offlineTranslations = glossaryTranslations ?? request.texts.map(() => undefined);
+    const untranslatedIndexes = request.texts.flatMap((_, index) =>
+      offlineTranslations[index] === undefined ? [index] : []
+    );
+    const mergedTranslations = request.texts.map(
+      (text, index) => offlineTranslations[index] ?? text
+    );
+    if (untranslatedIndexes.length === 0) {
+      return createSuccess(request, mergedTranslations);
     }
 
     if (options.hasProviderPermission !== undefined) {
@@ -169,6 +205,12 @@ export function createBackgroundMessageHandler(
         hasPermission = false;
       }
       if (!hasPermission) {
+        if (glossaryTranslations !== undefined && untranslatedIndexes.length < request.texts.length) {
+          return createSuccess(
+            request,
+            mergedTranslations
+          );
+        }
         return createFailure(
           request,
           'provider-failure',
@@ -181,7 +223,7 @@ export function createBackgroundMessageHandler(
     try {
       result = await withTimeout(
         options.runner.translate(
-          request.texts,
+          untranslatedIndexes.map((index) => request.texts[index] as string),
           request.purpose,
           settings,
           request.context ?? 'comment'
@@ -189,6 +231,9 @@ export function createBackgroundMessageHandler(
         timeoutMs
       );
     } catch (error) {
+      if (untranslatedIndexes.length < request.texts.length) {
+        return createSuccess(request, mergedTranslations);
+      }
       return createFailure(
         request,
         error instanceof OperationTimeoutError
@@ -202,8 +247,11 @@ export function createBackgroundMessageHandler(
 
     if (
       !isBackgroundTranslationResult(result) ||
-      result.translations.length !== request.texts.length
+      result.translations.length !== untranslatedIndexes.length
     ) {
+      if (untranslatedIndexes.length < request.texts.length) {
+        return createSuccess(request, mergedTranslations);
+      }
       return createFailure(
         request,
         'invalid-response',
@@ -212,10 +260,17 @@ export function createBackgroundMessageHandler(
     }
 
     if (!result.ok) {
+      if (untranslatedIndexes.length < request.texts.length) {
+        return createSuccess(request, mergedTranslations);
+      }
       return createFailure(request, result.error.code, result.error.message);
     }
 
-    return createSuccess(request, result.translations);
+    for (let index = 0; index < untranslatedIndexes.length; index += 1) {
+      const requestIndex = untranslatedIndexes[index] as number;
+      mergedTranslations[requestIndex] = result.translations[index] as string;
+    }
+    return createSuccess(request, mergedTranslations);
   };
 }
 

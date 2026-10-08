@@ -1,5 +1,6 @@
 import {
   createTranslationService,
+  translateGlossaryCoveredText,
   type CacheStore,
   type GlossaryDocument,
   type ProviderError,
@@ -8,7 +9,7 @@ import {
   type TranslationContext,
   type TranslationPurpose
 } from '../core/translate/index.ts';
-import type { ExtensionSettings } from '../shared/settings.ts';
+import { DEFAULT_SETTINGS, type ExtensionSettings } from '../shared/settings.ts';
 import type {
   BackgroundFailure,
   BackgroundTranslationResult
@@ -59,6 +60,23 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === 'string');
 }
 
+function providerCacheNamespace(settings: ExtensionSettings): string {
+  if (
+    settings.providerPreset === DEFAULT_SETTINGS.providerPreset &&
+    settings.baseURL === DEFAULT_SETTINGS.baseURL &&
+    settings.model === DEFAULT_SETTINGS.model &&
+    settings.useJsonOutputMode === DEFAULT_SETTINGS.useJsonOutputMode
+  ) {
+    return 'default';
+  }
+  return JSON.stringify([
+    settings.providerPreset,
+    settings.baseURL,
+    settings.model,
+    settings.useJsonOutputMode
+  ]);
+}
+
 export function createCoreBackgroundTranslationRunner(
   options: CoreTranslationRunnerOptions
 ): {
@@ -68,20 +86,75 @@ export function createCoreBackgroundTranslationRunner(
     settings: ExtensionSettings,
     context?: TranslationContext
   ): Promise<BackgroundTranslationResult>;
+  translateGlossaryCovered(
+    texts: string[],
+    purpose: TranslationPurpose
+  ): Promise<Array<string | undefined>>;
 } {
+  const inFlight = new Map<string, Promise<BackgroundTranslationResult>>();
+
   return {
+    async translateGlossaryCovered(texts, purpose) {
+      const glossary = await options.glossary;
+      return texts.map((text) =>
+        translateGlossaryCoveredText(text, glossary, purpose)
+      );
+    },
     async translate(texts, purpose, settings, context = 'comment') {
+      const cacheNamespace = providerCacheNamespace(settings);
+      const requestKey = JSON.stringify([cacheNamespace, context, purpose, texts]);
+      const existing = inFlight.get(requestKey);
+      if (existing !== undefined) {
+        return existing;
+      }
+
+      const operation = (async (): Promise<BackgroundTranslationResult> => {
       const observedFailures: ProviderError[] = [];
       const provider = options.providerFactory(settings);
+      const fallbackProvider = settings.fallbackEnabled === true &&
+        settings.fallbackBaseURL !== undefined &&
+        settings.fallbackBaseURL.trim().length > 0 &&
+        settings.fallbackModel !== undefined &&
+        settings.fallbackModel.trim().length > 0 &&
+        settings.fallbackApiKey !== undefined &&
+        settings.fallbackApiKey.trim().length > 0
+        ? options.providerFactory({
+            ...settings,
+            providerPreset: 'custom',
+            baseURL: settings.fallbackBaseURL,
+            model: settings.fallbackModel,
+            apiKey: settings.fallbackApiKey,
+            fallbackEnabled: false
+          })
+        : undefined;
       const observingProvider: TranslationProvider = {
         async translate(request): Promise<ProviderResult> {
           try {
             const result = await provider.translate(request);
-            if (!result.ok) {
-              observedFailures.push(result.error);
+            if (result.ok || fallbackProvider === undefined) {
+              if (!result.ok) {
+                observedFailures.push(result.error);
+              }
+              return result;
             }
-            return result;
+            const fallback = await fallbackProvider.translate(request);
+            if (!fallback.ok) {
+              observedFailures.push(fallback.error);
+            }
+            return fallback;
           } catch {
+            if (fallbackProvider !== undefined) {
+              try {
+                const fallback = await fallbackProvider.translate(request);
+                if (fallback.ok) {
+                  return fallback;
+                }
+                observedFailures.push(fallback.error);
+                return fallback;
+              } catch {
+                // Report a generic failure below when both providers fail.
+              }
+            }
             observedFailures.push({
               code: 'transport-error',
               message: 'The provider operation failed.'
@@ -95,7 +168,8 @@ export function createCoreBackgroundTranslationRunner(
         glossary: await options.glossary,
         provider: observingProvider,
         cacheStore: options.cacheStore,
-        context
+        context,
+        cacheNamespace
       });
 
       let translations: string[];
@@ -103,6 +177,8 @@ export function createCoreBackgroundTranslationRunner(
         translations =
           purpose === 'event-name'
             ? await service.translateEventNames(texts)
+            : purpose === 'dictionary' && service.translateDictionary !== undefined
+              ? await service.translateDictionary(texts)
             : await service.translate(texts);
       } catch {
         return {
@@ -133,6 +209,15 @@ export function createCoreBackgroundTranslationRunner(
       }
 
       return { ok: true, translations };
+      })();
+      inFlight.set(requestKey, operation);
+      try {
+        return await operation;
+      } finally {
+        if (inFlight.get(requestKey) === operation) {
+          inFlight.delete(requestKey);
+        }
+      }
     }
   };
 }

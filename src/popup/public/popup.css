@@ -1,0 +1,230 @@
+:root {
+  color-scheme: light dark;
+  font: 14px/1.45 system-ui, sans-serif;
+}
+
+body {
+  box-sizing: border-box;
+  width: 340px;
+  margin: 0;
+  background: Canvas;
+  color: CanvasText;
+}
+
+main {
+  padding: 18px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.brand-mark {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 12px;
+  background: #d84747;
+  color: #fff;
+  font-weight: 800;
+  letter-spacing: -0.08em;
+}
+
+h1,
+.brand p,
+.readiness p,
+.toggle-row small,
+.mode-option small,
+.action-status {
+  margin: 0;
+}
+
+h1 {
+  font-size: 16px;
+  line-height: 1.3;
+}
+
+.brand p,
+.readiness p,
+.toggle-row small,
+.mode-option small {
+  display: block;
+  color: GrayText;
+  font-size: 12px;
+}
+
+.readiness {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-height: 52px;
+  box-sizing: border-box;
+  padding: 11px 12px;
+  border: 1px solid color-mix(in srgb, CanvasText 13%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, Highlight 7%, Canvas);
+}
+
+.status-mark {
+  flex: 0 0 auto;
+  width: 9px;
+  height: 9px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: GrayText;
+}
+
+.readiness[data-state='ready'] .status-mark {
+  background: #2f9d63;
+}
+
+.readiness[data-state='needs-setup'] .status-mark,
+.readiness[data-state='error'] .status-mark {
+  background: #d78a24;
+}
+
+.readiness strong {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 13px;
+}
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 17px 1px 12px;
+  cursor: pointer;
+}
+
+.toggle-row strong,
+.mode-option strong {
+  display: block;
+  font-size: 13px;
+}
+
+input[type='checkbox'][role='switch'] {
+  appearance: none;
+  position: relative;
+  flex: 0 0 auto;
+  width: 40px;
+  height: 23px;
+  margin: 0;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, CanvasText 24%, Canvas);
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+input[type='checkbox'][role='switch']::before {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: Canvas;
+  content: '';
+  transition: transform 120ms ease;
+}
+
+input[type='checkbox'][role='switch']:checked {
+  background: #2f9d63;
+}
+
+input[type='checkbox'][role='switch']:checked::before {
+  transform: translateX(17px);
+}
+
+input[type='checkbox'][role='switch']:focus-visible,
+.mode-option input:focus-visible,
+button:focus-visible {
+  outline: 2px solid Highlight;
+  outline-offset: 3px;
+}
+
+input:disabled,
+fieldset:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+fieldset {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.secondary-action {
+  margin-top: 14px;
+  background: transparent;
+  color: Highlight;
+}
+
+.secondary-action:hover {
+  background: color-mix(in srgb, Highlight 10%, Canvas);
+  color: Highlight;
+}
+
+legend {
+  margin-bottom: 7px;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.mode-option {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, CanvasText 15%, transparent);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.mode-option:has(input:checked) {
+  border-color: color-mix(in srgb, Highlight 62%, CanvasText 14%);
+  background: color-mix(in srgb, Highlight 9%, Canvas);
+}
+
+.mode-option input {
+  margin: 0;
+  accent-color: Highlight;
+}
+
+button {
+  width: 100%;
+  min-height: 38px;
+  margin-top: 14px;
+  border: 0;
+  border-radius: 8px;
+  background: #d84747;
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #bf3838;
+}
+
+button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.action-status {
+  min-height: 18px;
+  margin-top: 7px;
+  color: GrayText;
+  font-size: 12px;
+}

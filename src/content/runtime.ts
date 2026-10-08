@@ -3,13 +3,19 @@ import {
   decideRenderIntent,
   DISPLAY_SELECTORS,
   getTranslationContextForStrategyId,
+  isFixedUiElementProtected,
   resolveElementStrategy,
+  resolveFallbackStrategy,
+  selectorMatchesPath,
   type DisplayMode,
   type DisplayNodeInfo,
   type DisplayRecordTable
 } from '../core/display/index.ts';
-import type { TranslationService } from '../core/translate/index.ts';
+import { classifyText, translateFixedUiTexts, type GlossaryDocument, type TranslationService } from '../core/translate/index.ts';
 import type { TranslationContext, TranslationPurpose } from '../core/translate/index.ts';
+import { createFixedUiChrome } from './fixed-ui-chrome.ts';
+import { partitionPageRecords, type PageBatchLimits } from './translation-batches.ts';
+import { FIXED_UI_ATTRIBUTE_TARGETS } from '../core/display/selectors.ts';
 
 export type ContentTranslator = Pick<
   TranslationService,
@@ -58,6 +64,7 @@ export interface ContentRuntimeStats {
 export interface ContentRuntimeOptions {
   document: Document;
   translator: ContentTranslator;
+  fixedUiGlossary?: GlossaryDocument;
   initialMode?: DisplayMode;
   initialEnabled?: boolean;
   observerFactory?: (callback: MutationCallback) => MutationObserver;
@@ -100,7 +107,18 @@ interface PendingRecord {
 const observerOptions: MutationObserverInit = {
   subtree: true,
   childList: true,
-  characterData: true
+  characterData: true,
+  attributes: true,
+  attributeFilter: [...new Set(FIXED_UI_ATTRIBUTE_TARGETS.map((target) => target.attribute))]
+};
+
+// Article prose is split into many short nodes around linked identities. Keep
+// those provider batches small enough that one malformed large response does
+// not leave the whole first screen in English. Other page groups retain the
+// normal larger batch size.
+const ARTICLE_PAGE_BATCH_LIMITS: PageBatchLimits = {
+  maxItems: 8,
+  maxCharacters: 3000
 };
 
 function elementInfo(element: Element): DisplayNodeInfo['parent'] {
@@ -137,7 +155,8 @@ function isInMarkedSubtree(node: Node): boolean {
 
 function collectTextNodes(
   element: Element,
-  candidateElements: ReadonlySet<Element>
+  candidateElements: ReadonlySet<Element>,
+  canVisit: (element: Element) => boolean = () => true
 ): Text[] {
   const result: Text[] = [];
 
@@ -147,7 +166,7 @@ function collectTextNodes(
       return;
     }
 
-    if (node.nodeType !== 1 || isMarkedElement(node as Element)) {
+    if (node.nodeType !== 1 || isMarkedElement(node as Element) || !canVisit(node as Element)) {
       return;
     }
 
@@ -179,6 +198,8 @@ function findMarkedSibling(textNode: Text): Element | undefined {
 class ContentRuntimeImpl implements ContentRuntime {
   private readonly document: Document;
   private readonly translator: ContentTranslator;
+  private readonly fixedUiGlossary: GlossaryDocument;
+  private readonly fixedUiChrome: ReturnType<typeof createFixedUiChrome>;
   private readonly records: DisplayRecordTable = createDisplayRecordTable();
   private readonly textNodes = new Map<string, Text>();
   private readonly rendered = new Map<string, RenderedState>();
@@ -198,6 +219,11 @@ class ContentRuntimeImpl implements ContentRuntime {
   constructor(options: ContentRuntimeOptions) {
     this.document = options.document;
     this.translator = options.translator;
+    this.fixedUiGlossary = {
+      version: 1,
+      entries: [...(options.fixedUiGlossary?.entries ?? [])]
+    };
+    this.fixedUiChrome = createFixedUiChrome(this.document, this.fixedUiGlossary);
     this.mode = options.initialMode ?? 'A';
     this.enabled = options.initialEnabled ?? true;
     this.onDiagnostic = options.onDiagnostic;
@@ -236,6 +262,7 @@ class ContentRuntimeImpl implements ContentRuntime {
 
     if (!enabled) {
       this.observer?.disconnect();
+      this.fixedUiChrome.sync(false, this.mode);
       for (const key of Array.from(this.rendered.keys())) {
         this.clearRendered(key);
       }
@@ -348,8 +375,13 @@ class ContentRuntimeImpl implements ContentRuntime {
   private collectCandidates(): Element[] {
     const candidates: Element[] = [];
     const seen = new Set<Element>();
+    const pathname = this.document.location.pathname;
 
     for (const definition of DISPLAY_SELECTORS) {
+      if (!selectorMatchesPath(definition, pathname)) {
+        continue;
+      }
+
       for (const element of Array.from(
         this.document.querySelectorAll(definition.selector)
       )) {
@@ -367,8 +399,10 @@ class ContentRuntimeImpl implements ContentRuntime {
     if (!this.enabled) {
       return;
     }
+    this.withObserverSuspended(() => this.fixedUiChrome.sync(this.enabled, this.mode));
 
     const pending: PendingRecord[] = [];
+    const translationsByKey = new Map<string, string>();
     const candidates = this.collectCandidates();
     const candidateElements = new Set(candidates);
 
@@ -377,14 +411,67 @@ class ContentRuntimeImpl implements ContentRuntime {
         continue;
       }
 
-      const strategy = resolveElementStrategy(elementInfo(candidate));
-      for (const textNode of collectTextNodes(candidate, candidateElements)) {
+      const candidateStrategy = resolveElementStrategy(
+        elementInfo(candidate),
+        this.document.location.pathname
+      );
+      if (
+        candidateStrategy.id === 'comment-body' &&
+        !classifyText(
+          candidate.textContent ?? '',
+          this.fixedUiGlossary,
+          'comment'
+        ).shouldTranslate
+      ) {
+        continue;
+      }
+      const fixedUi = candidateStrategy.translationSource === 'fixed-ui-glossary';
+      for (const textNode of collectTextNodes(candidate, candidateElements, (element) =>
+        !fixedUi || !isFixedUiElementProtected(elementInfo(element), this.document.location.pathname)
+      )) {
         if (textNode.data.trim().length === 0 || isInMarkedSubtree(textNode)) {
           continue;
         }
 
-        const key = this.keyFor(textNode);
-        const existing = this.records.get(key);
+        let key = this.keyFor(textNode);
+        let strategy = candidateStrategy;
+        let existing = this.records.get(key);
+        if (existing !== undefined) {
+          const rendered = this.rendered.get(key);
+          const expected = rendered?.kind === 'replace-text'
+            ? rendered.translatedText
+            : existing.original;
+          if (textNode.data !== expected) {
+            // A page write supplies a new original. Discard the old record and
+            // rotate the key so an older provider response cannot overwrite it.
+            this.clearRendered(key);
+            this.records.remove(key);
+            this.textNodes.delete(key);
+            this.markedTextNodes.delete(textNode);
+            this.skippedNodes.delete(key);
+            this.nodeKeys.delete(textNode);
+            key = this.keyFor(textNode);
+            existing = undefined;
+          }
+        }
+        if (fixedUi && existing?.translated !== undefined) {
+          continue;
+        }
+        if (fixedUi) {
+          const original = existing?.original ?? textNode.data;
+          const translated = translateFixedUiTexts([original], this.fixedUiGlossary, strategy.glossaryCategories)[0];
+          if (translated === undefined || translated === original) {
+            const fallback = resolveFallbackStrategy(candidateStrategy, this.document.location.pathname);
+            const words = original.match(/[A-Za-z]+(?:'[A-Za-z]+)?/gu) ?? [];
+            if (fallback === undefined || words.length < (fallback.minTextWords ?? 0) ||
+              !classifyText(original, this.fixedUiGlossary, getTranslationContextForStrategyId(fallback.id)).shouldTranslate) {
+              continue;
+            }
+            strategy = fallback;
+          } else {
+            translationsByKey.set(key, translated);
+          }
+        }
         if (existing !== undefined) {
           if (textNode.data !== existing.original && !this.markedTextNodes.has(textNode)) {
             this.report({
@@ -437,7 +524,11 @@ class ContentRuntimeImpl implements ContentRuntime {
     >();
     for (const record of pending) {
       const current = this.records.get(record.key);
-      if (current?.strategy.translation !== 'allowed') {
+      if (
+        current?.strategy.translation !== 'allowed' ||
+        current.strategy.translationSource === 'fixed-ui-glossary' ||
+        !current.strategy.allowedModes.includes(this.mode)
+      ) {
         continue;
       }
       const purpose: TranslationPurpose =
@@ -452,23 +543,39 @@ class ContentRuntimeImpl implements ContentRuntime {
       groups.set(groupKey, group);
     }
 
-    const translationsByKey = new Map<string, string>();
+    // Local labels become visible immediately; provider latency only delays uncovered prose.
+    for (const record of pending) {
+      if (this.records.get(record.key)?.strategy.translationSource === 'fixed-ui-glossary') {
+        this.records.updateTranslation(record.key, translationsByKey.get(record.key) ?? record.original);
+        await this.applyRecord(record.key);
+      }
+    }
     await Promise.all(
       Array.from(groups.values(), async (group) => {
-        const translations = await this.translate(
-          group.records.map((record) => record.original),
-          group.purpose,
-          group.context
-        );
-        group.records.forEach((record, index) => {
-          translationsByKey.set(record.key, translations[index] ?? record.original);
-        });
+        const articleBatch = group.records.some((record) =>
+          record.strategyId === 'article-body' || record.strategyId === 'news-article-title'
+        ) ? ARTICLE_PAGE_BATCH_LIMITS : undefined;
+        for (const batch of partitionPageRecords(group.records, articleBatch)) {
+          const translations = await this.translate(
+            batch.map((record) => record.original), group.purpose, group.context
+          );
+          for (const [index, record] of batch.entries()) {
+            if (this.records.get(record.key) !== undefined) {
+              this.records.updateTranslation(record.key, translations[index] ?? record.original);
+              await this.applyRecord(record.key);
+            }
+            translationsByKey.set(record.key, translations[index] ?? record.original);
+          }
+        }
       })
     );
 
     for (const record of pending) {
       const current = this.records.get(record.key);
       if (current === undefined) {
+        continue;
+      }
+      if (current.strategy.translationSource === 'fixed-ui-glossary' || translationsByKey.has(record.key)) {
         continue;
       }
 
@@ -668,7 +775,12 @@ class ContentRuntimeImpl implements ContentRuntime {
     for (const record of records) {
       if (record.type === 'characterData') {
         const textNode = record.target as Text;
-        if (this.markedTextNodes.has(textNode) || isInMarkedSubtree(textNode)) {
+        const key = this.nodeKeys.get(textNode);
+        const existing = key === undefined ? undefined : this.records.get(key);
+        const rendered = key === undefined ? undefined : this.rendered.get(key);
+        const changedRenderedText = rendered?.kind === 'replace-text' &&
+          textNode.data !== rendered.translatedText;
+        if ((this.markedTextNodes.has(textNode) && !changedRenderedText) || isInMarkedSubtree(textNode)) {
           continue;
         }
         shouldScan = true;
@@ -684,6 +796,9 @@ class ContentRuntimeImpl implements ContentRuntime {
         if (addedNodes.length > 0 && addedNodes.every((node) => isInMarkedSubtree(node))) {
           continue;
         }
+        shouldScan = true;
+      }
+      if (record.type === 'attributes' && observerOptions.attributeFilter?.includes(record.attributeName ?? '') === true) {
         shouldScan = true;
       }
     }
