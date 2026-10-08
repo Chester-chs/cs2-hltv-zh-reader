@@ -561,3 +561,12 @@ Status: published to GitHub and pushed to `main`; future updates should continue
 - Replaced the README with `README.md` (English) and `README.zh-CN.md` (中文). Each page has an `English | 中文` link at the top, so only one language is shown at a time and one click switches between the two GitHub-rendered pages.
 - The published release asset is `CS2-HLTV-Chinese-Reader-v1.0.0.zip` (95,260 bytes, SHA-256 `0124D83A15DF2CFD493EF3E8EBD7E3BF7F97EEB76C839756D31E6D2CC8C03EC7`) and contains the validated MV3 service-worker build. The matching unpacked folder is `C:\Users\Chester\Downloads\CS2-HLTV-Chinese-Reader-v1.0.0`.
 - Release commit: `c93e74abed5cf4cfc4f5e5b0ca07f26b65573164`; the follow-up README language-switch commit is `c8a28a6`. Tag and release: `v1.0.0` at `https://github.com/Chester-chs/cs2-hltv-zh-reader/releases/tag/v1.0.0`. The asset is uploaded and the remote `main` line matches the latest local commit.
+
+## README and installation package update (2026-10-08)
+
+Status: documentation update, rebuild, package refresh, and GitHub asset replacement are complete in the working tree; the README changes are ready to commit and push.
+
+- Expanded `README.md` and `README.zh-CN.md` with beginner-oriented Chrome and Edge installation steps, correct folder layout, provider setup, origin authorization, connection testing, page-mode activation, word/sentence lookup, updates, troubleshooting, privacy, and the old MV3/context-menu error recovery steps. The two pages still use a one-click `English | 中文` switch and show only one language per page.
+- Rebuilt and refreshed `C:\Users\Chester\Downloads\CS2-HLTV-Chinese-Reader-v1.0.0.zip`. The package now includes `README.md`, `README.zh-CN.md`, and a detailed `INSTALL.txt` in addition to the validated extension files. Size: 104,661 bytes. SHA-256: `1A3B6BA77C076A51C2E95324D1078BCB13865BC6E94CA3977797225615403C27`.
+- Package audit: manifest version `1.0.0`, `background.service_worker` is `background.js`, `background.scripts` is absent, required files are present, `node --check` passes for background/content bundles, and no bare import/export declarations remain. `npm test` passes **184/184**, `npm run typecheck`, `npm run build`, and `git diff --check` pass.
+- Replaced the `v1.0.0` GitHub release asset with the refreshed package. GitHub reports size 104,661 bytes and digest `sha256:1a3b6ba77c076a51c2e95324d1078bcb13865bc6e94ca3977797225615403c27` at `https://github.com/Chester-chs/cs2-hltv-zh-reader/releases/tag/v1.0.0`.
