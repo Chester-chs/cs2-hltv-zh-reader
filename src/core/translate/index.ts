@@ -750,6 +750,7 @@ export interface OpenAICompatibleProviderConfig {
   timeoutMs: number;
   temperature?: number;
   useJsonOutputMode?: boolean;
+  translationStyle?: 'natural' | 'literal';
   transport: ChatCompletionsTransport;
 }
 
@@ -850,6 +851,7 @@ export function createOpenAICompatibleProvider(
   const temperature =
     config.temperature ?? DEFAULT_PROVIDER_TEMPERATURE;
   const useJsonOutputMode = config.useJsonOutputMode ?? true;
+  const translationStyle = config.translationStyle ?? 'natural';
   const systemPrompt = [
     '你是 CS2 新闻与赛事名称翻译器。把输入中的每一条英文翻译成简体中文。',
     '',
@@ -859,9 +861,9 @@ export function createOpenAICompatibleProvider(
     '',
     'purpose 为 event-name 时，保留赛事及品牌名称。尤其要逐字保留该条目的全部 protected_fragments。允许调整其他词语的语序，使名称符合简体中文习惯，例如将季节和年份调整到赛事名称之前。',
     '',
-    'purpose 为 plain 时，将可翻译内容自然地翻译成简体中文，并保留原文中的事实、数字和含义。',
+    `purpose 为 plain 时，${translationStyle === 'literal' ? '尽量贴近英文句子结构地翻译成简体中文' : '自然地翻译成简体中文'}，并保留原文中的事实、数字和含义。`,
     '',
-    'purpose 为 dictionary 时，按牛津词典风格整理每个选中的英文单词。必须包含所有适用的常见词性；每项使用“词性：中文释义 || concise English definition”格式，中文释义和英文解释都要简短准确。若输入是动词变形或过去分词，先给出“动词原形：...”一项。若能确定发音，接着给出“英式音标：...；美式音标：...”两项；不确定时省略音标。可选的网络义项使用“网络：...”表示。不要编造不常见的词性，不要输出推理过程、Markdown 或额外字段。',
+    'purpose 为 dictionary 时，按牛津词典风格整理每个选中的英文或中文单词。必须包含所有适用的常见词性；每项使用“词性：中文释义 || concise English definition”格式，中文释义和英文解释都要简短准确。若输入是动词变形或过去分词，先给出“动词原形：...”一项；输入本身是动词原形时不要重复输出原形。若能确定发音，接着给出“英式音标：...；美式音标：...”两项；不确定时省略音标。必须给出“Oxford/CEFR 难度：A1/A2/B1/B2/C1/C2”；无法可靠确定时写“Oxford/CEFR 难度：未知”，不得猜测。可选地给出一条“例句：...”和“网络：...”义项。不要输出“中文释义”“英文释义”等字段名，不要编造不常见的词性，不要输出推理过程、Markdown 或额外字段。',
     'purpose 为 sentence 时，把选中的完整句子或短语自然翻译成简体中文，保留事实、数字、专名和原意，不输出词典格式。',
     '',
     '只输出一个合法 JSON 对象，形状必须为 {"translations":["译文"]}。不要输出解释、额外字段、前后缀或 Markdown 代码块围栏。',

@@ -16,6 +16,8 @@ export type PopupReadiness =
 export interface PopupState {
   enabled: boolean;
   mode: DisplayMode;
+  interfaceLanguageSelected: boolean;
+  uiLanguage: 'zh-CN';
   readiness: PopupReadiness;
 }
 
@@ -56,6 +58,8 @@ export async function loadPopupState(
   return {
     enabled: settings.enabled,
     mode: settings.mode,
+    interfaceLanguageSelected: true,
+    uiLanguage: 'zh-CN',
     readiness: resolvePopupReadiness(settings.apiKey, permission)
   };
 }

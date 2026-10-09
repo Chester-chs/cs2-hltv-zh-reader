@@ -5,7 +5,7 @@ import type {
 import type { TranslateFailureCode } from '../background/protocol.ts';
 import type { TranslationPurpose } from '../core/translate/index.ts';
 import type { DictionaryEntry } from './dictionary-store.ts';
-import type { ThemeMode } from '../shared/settings.ts';
+import type { AudienceMode, CardColor, NativeLanguage, ThemeMode, UiLanguage } from '../shared/settings.ts';
 
 function setStyles(element: HTMLElement, styles: Partial<CSSStyleDeclaration>): void {
   for (const [property, value] of Object.entries(styles)) {
@@ -28,8 +28,27 @@ export interface DictionaryDisplayData {
   baseForm?: string;
   ukPronunciation?: string;
   usPronunciation?: string;
+  pinyin?: string;
+  difficulty?: string;
+  examples?: string[];
   definitions: DictionaryDefinition[];
   networkMeaning?: string;
+}
+
+export interface SelectionLearningOptions {
+  nativeLanguage?: NativeLanguage | null;
+  audienceMode?: AudienceMode;
+  uiLanguage?: UiLanguage;
+  showOriginal?: boolean;
+  showPinyin?: boolean;
+  showDifficulty?: boolean;
+  showExamples?: boolean;
+}
+
+export interface SelectionCardAppearance {
+  theme: ThemeMode;
+  cardColor: CardColor;
+  fontScale: number;
 }
 
 export type SelectionPurpose = 'dictionary' | 'sentence';
@@ -42,45 +61,89 @@ export function nextThemeMode(theme: ThemeMode): ThemeMode {
   return theme === 'system' ? 'light' : theme === 'light' ? 'dark' : 'system';
 }
 
+const CARD_COLOR_SURFACES: Record<CardColor, { light: string; dark: string; swatch: string }> = {
+  neutral: { light: 'rgba(255, 255, 255, 0.96)', dark: 'rgba(28, 28, 30, 0.97)', swatch: '#f5f5f7' },
+  blue: { light: 'rgba(239, 246, 255, 0.97)', dark: 'rgba(20, 38, 62, 0.97)', swatch: '#dbeafe' },
+  green: { light: 'rgba(240, 253, 244, 0.97)', dark: 'rgba(19, 49, 35, 0.97)', swatch: '#dcfce7' },
+  sand: { light: 'rgba(255, 251, 235, 0.97)', dark: 'rgba(62, 46, 20, 0.97)', swatch: '#fef3c7' },
+  rose: { light: 'rgba(255, 241, 242, 0.97)', dark: 'rgba(63, 29, 38, 0.97)', swatch: '#ffe4e6' }
+};
+
 export function classifySelectionPurpose(text: string): SelectionPurpose {
   const normalized = text.trim();
-  return /^[A-Za-z]+(?:[-'][A-Za-z]+)*$/u.test(normalized)
+  return /^[A-Za-z]+(?:[-'][A-Za-z]+)*$/u.test(normalized) || /^[\u3400-\u9fff]{1,8}$/u.test(normalized)
     ? 'dictionary'
     : 'sentence';
 }
 
+function isChineseSelection(text: string): boolean {
+  return /[\u3400-\u9fff]/u.test(text);
+}
+
+export function canTranslateSelection(
+  text: string,
+  _nativeLanguage: NativeLanguage | null | undefined
+): boolean {
+  return !isChineseSelection(text);
+}
+
 const PART_OF_SPEECH_LABELS = new Map<string, string>([
-  ['n', '名词'],
-  ['noun', '名词'],
-  ['名词', '名词'],
-  ['v', '动词'],
-  ['verb', '动词'],
-  ['动词', '动词'],
-  ['adj', '形容词'],
-  ['adjective', '形容词'],
-  ['形容词', '形容词'],
-  ['adv', '副词'],
-  ['adverb', '副词'],
-  ['副词', '副词'],
-  ['prep', '介词'],
-  ['preposition', '介词'],
-  ['介词', '介词'],
-  ['pron', '代词'],
-  ['pronoun', '代词'],
-  ['代词', '代词'],
-  ['conj', '连词'],
-  ['conjunction', '连词'],
-  ['连词', '连词'],
-  ['phrase', '短语'],
-  ['短语', '短语'],
-  ['phr', '短语'],
-  ['int', '感叹词'],
-  ['interjection', '感叹词'],
-  ['感叹词', '感叹词']
+  ['n', 'n.'],
+  ['noun', 'n.'],
+  ['名词', 'n.'],
+  ['v', 'v.'],
+  ['verb', 'v.'],
+  ['动词', 'v.'],
+  ['adj', 'adj.'],
+  ['adjective', 'adj.'],
+  ['形容词', 'adj.'],
+  ['adv', 'adv.'],
+  ['adverb', 'adv.'],
+  ['副词', 'adv.'],
+  ['prep', 'prep.'],
+  ['preposition', 'prep.'],
+  ['介词', 'prep.'],
+  ['pron', 'pron.'],
+  ['pronoun', 'pron.'],
+  ['代词', 'pron.'],
+  ['conj', 'conj.'],
+  ['conjunction', 'conj.'],
+  ['连词', 'conj.'],
+  ['phrase', 'phr.'],
+  ['短语', 'phr.'],
+  ['phr', 'phr.'],
+  ['int', 'int.'],
+  ['interjection', 'int.'],
+  ['感叹词', 'int.'],
+  ['动词过去式', 'v.（过去式）'],
+  ['动词过去分词', 'v.（过去分词）'],
+  ['过去式', 'v.（过去式）'],
+  ['过去分词', 'v.（过去分词）'],
+  ['动词过去式/过去分词', 'v.（过去式/过去分词）'],
+  ['past tense', 'v.（过去式）'],
+  ['past participle', 'v.（过去分词）'],
+  ['verb past tense', 'v.（过去式）'],
+  ['verb past participle', 'v.（过去分词）'],
+  ['verb past tense/past participle', 'v.（过去式/过去分词）'],
+  ['v past tense', 'v.（过去式）'],
+  ['v past participle', 'v.（过去分词）']
 ]);
 
 function normalizePartOfSpeech(label: string): string | undefined {
-  return PART_OF_SPEECH_LABELS.get(label.trim().toLowerCase().replace(/\.$/u, ''));
+  const normalized = label.trim().toLowerCase().replace(/\.$/u, '').replace(/\s*\/\s*/gu, '/').replace(/\s+/gu, ' ');
+  return PART_OF_SPEECH_LABELS.get(normalized);
+}
+
+function isPartOfSpeechLabel(label: string): boolean {
+  return /^(?:词性|part\s+of\s+speech|pos)$/iu.test(label.trim());
+}
+
+function isChineseMeaningLabel(label: string): boolean {
+  return /^(?:中文释义|中文意思|chinese\s+meaning|meaning)$/iu.test(label.trim());
+}
+
+function isEnglishMeaningLabel(label: string): boolean {
+  return /^(?:英文释义|英语释义|english\s+definition|concise\s+english\s+definition|definition)$/iu.test(label.trim());
 }
 
 /**
@@ -94,7 +157,28 @@ export function parseDictionaryTranslation(translated: string): DictionaryDispla
   let baseForm: string | undefined;
   let ukPronunciation: string | undefined;
   let usPronunciation: string | undefined;
+  let pinyin: string | undefined;
+  let difficulty: string | undefined;
+  const examples: string[] = [];
   let networkMeaning: string | undefined;
+  let pendingDefinition: {
+    partOfSpeech: string;
+    meanings: string[];
+    englishMeaning?: string;
+  } | undefined;
+
+  const flushPendingDefinition = (): void => {
+    if (pendingDefinition === undefined || pendingDefinition.meanings.length === 0) {
+      pendingDefinition = undefined;
+      return;
+    }
+    definitions.push({
+      partOfSpeech: pendingDefinition.partOfSpeech,
+      meaning: pendingDefinition.meanings.join('；'),
+      ...(pendingDefinition.englishMeaning === undefined ? {} : { englishMeaning: pendingDefinition.englishMeaning })
+    });
+    pendingDefinition = undefined;
+  };
 
   for (const rawPart of translated.split(/[;；\n]+/u)) {
     const part = rawPart.trim();
@@ -115,16 +199,59 @@ export function parseDictionaryTranslation(translated: string): DictionaryDispla
       }
       continue;
     }
+    const pinyinPart = part.match(/^(?:拼音|pinyin)\s*[:：]\s*(.+)$/iu);
+    if (pinyinPart !== null) {
+      pinyin = pinyinPart[1]?.trim();
+      continue;
+    }
+    const difficultyPart = part.match(/^(?:(?:难度|词汇难度|词汇等级|等级)|cefr(?:\s*(?:level|difficulty))?|level|difficulty|oxford\s*(?:\/\s*cefr)?(?:\s*(?:level|difficulty|难度|等级))?|牛津(?:词典)?(?:\s*(?:难度|等级))?)\s*[:：]?\s*((?:A|B|C)[12]|初级|中级|高级|未知|unknown)$/iu);
+    if (difficultyPart !== null) {
+      difficulty = difficultyPart[1]?.trim().toUpperCase();
+      continue;
+    }
+    const examplePart = part.match(/^(?:例句|example)\s*[:：]\s*(.+)$/iu);
+    if (examplePart !== null) {
+      examples.push(examplePart[1]?.trim() ?? '');
+      continue;
+    }
     const network = part.match(/^网络\s*[:：]\s*(.+)$/u);
     if (network !== null) {
+      flushPendingDefinition();
       networkMeaning = network[1]?.trim();
       continue;
     }
-    const labelled = part.match(/^([^:：]{1,12})\s*[:：]\s*(.+)$/u);
+    const labelled = part.match(/^([^:：]{1,64})\s*[:：]\s*(.+)$/u);
     if (labelled !== null) {
-      const partOfSpeech = normalizePartOfSpeech(labelled[1] ?? '');
+      const label = labelled[1]?.trim() ?? '';
+      const value = labelled[2]?.trim() ?? '';
+      if (isPartOfSpeechLabel(label)) {
+        const partOfSpeech = normalizePartOfSpeech(value);
+        if (partOfSpeech !== undefined) {
+          flushPendingDefinition();
+          pendingDefinition = { partOfSpeech, meanings: [] };
+          continue;
+        }
+      }
+      if (isChineseMeaningLabel(label)) {
+        if (pendingDefinition === undefined) {
+          pendingDefinition = { partOfSpeech: '释义', meanings: [] };
+        }
+        pendingDefinition.meanings.push(value);
+        continue;
+      }
+      if (isEnglishMeaningLabel(label)) {
+        if (pendingDefinition !== undefined) {
+          pendingDefinition.englishMeaning = value;
+          flushPendingDefinition();
+        } else {
+          unlabelled.push(value);
+        }
+        continue;
+      }
+      const partOfSpeech = normalizePartOfSpeech(label);
       if (partOfSpeech !== undefined) {
-        const [meaning, englishMeaning] = (labelled[2]?.trim() ?? '').split(/\s+\|\|\s+/u, 2);
+        flushPendingDefinition();
+        const [meaning, englishMeaning] = value.split(/\s+\|\|\s+/u, 2);
         definitions.push({
           partOfSpeech,
           meaning: meaning ?? '',
@@ -133,8 +260,14 @@ export function parseDictionaryTranslation(translated: string): DictionaryDispla
         continue;
       }
     }
-    unlabelled.push(part);
+    if (pendingDefinition !== undefined) {
+      pendingDefinition.meanings.push(part);
+    } else {
+      unlabelled.push(part);
+    }
   }
+
+  flushPendingDefinition();
 
   if (definitions.length === 0 && unlabelled.length > 0) {
     definitions.push({
@@ -152,13 +285,16 @@ export function parseDictionaryTranslation(translated: string): DictionaryDispla
     ...(baseForm === undefined ? {} : { baseForm }),
     ...(ukPronunciation === undefined ? {} : { ukPronunciation }),
     ...(usPronunciation === undefined ? {} : { usPronunciation }),
+    ...(pinyin === undefined ? {} : { pinyin }),
+    ...(difficulty === undefined ? {} : { difficulty }),
+    ...(examples.length === 0 ? {} : { examples }),
     definitions,
     ...(networkMeaning === undefined ? {} : { networkMeaning })
   };
 }
 
 export function inferRegularPastBaseForm(original: string, definitions: readonly DictionaryDefinition[]): string | undefined {
-  if (!definitions.some((definition) => definition.partOfSpeech === '动词')) {
+  if (!definitions.some((definition) => definition.partOfSpeech === 'v.' || definition.partOfSpeech === '动词')) {
     return undefined;
   }
   const word = original.trim();
@@ -180,6 +316,12 @@ export function inferRegularPastBaseForm(original: string, definitions: readonly
     return `${stem}e`;
   }
   return stem;
+}
+
+export function shouldShowBaseForm(original: string, baseForm: string): boolean {
+  const selected = original.trim().toLowerCase();
+  const base = baseForm.trim().toLowerCase();
+  return selected.length > 0 && base.length > 0 && selected !== base;
 }
 
 function appendSearchIcon(
@@ -216,23 +358,46 @@ function appendSearchIcon(
   parent.appendChild(icon);
 }
 
+function appendSettingsIcon(document: Document, parent: Element): void {
+  const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  icon.setAttribute('viewBox', '0 0 24 24');
+  icon.setAttribute('aria-hidden', 'true');
+  icon.setAttribute('focusable', 'false');
+  icon.setAttribute('width', '20');
+  icon.setAttribute('height', '20');
+  icon.setAttribute('fill', 'none');
+  icon.setAttribute('stroke', 'currentColor');
+  icon.setAttribute('stroke-width', '1.7');
+  icon.setAttribute('stroke-linejoin', 'round');
+  icon.style.setProperty('width', 'calc(20px * var(--hltv-zh-scale))');
+  icon.style.setProperty('height', 'calc(20px * var(--hltv-zh-scale))');
+  const gear = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  gear.setAttribute('d', 'M10 3h4l.5 2.3 2 .9 2.1-.8 2 3.4-1.7 1.5v2.4l1.7 1.5-2 3.4-2.1-.8-2 .9L14 21h-4l-.5-2.3-2-.9-2.1.8-2-3.4 1.7-1.5v-2.4L3.4 9.8l2-3.4 2.1.8 2-.9Z');
+  const center = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+  center.setAttribute('cx', '12');
+  center.setAttribute('cy', '12');
+  center.setAttribute('r', '3.2');
+  icon.append(gear, center);
+  parent.appendChild(icon);
+}
+
 function appendCloseIcon(document: Document, parent: Element): void {
   const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   icon.setAttribute('viewBox', '0 0 24 24');
   icon.setAttribute('aria-hidden', 'true');
   icon.setAttribute('focusable', 'false');
-  icon.setAttribute('width', '22');
-  icon.setAttribute('height', '22');
+  icon.setAttribute('width', '20');
+  icon.setAttribute('height', '20');
   icon.setAttribute('fill', 'none');
   icon.setAttribute('stroke', 'currentColor');
   icon.setAttribute('stroke-width', '1.7');
   icon.setAttribute('stroke-linecap', 'round');
-  icon.style.setProperty('width', 'calc(22px * var(--hltv-zh-scale))');
-  icon.style.setProperty('height', 'calc(22px * var(--hltv-zh-scale))');
+  icon.style.setProperty('width', 'calc(20px * var(--hltv-zh-scale))');
+  icon.style.setProperty('height', 'calc(20px * var(--hltv-zh-scale))');
   const first = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  first.setAttribute('d', 'm6 6 12 12');
+  first.setAttribute('d', 'm4 4 16 16');
   const second = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  second.setAttribute('d', 'm18 6-12 12');
+  second.setAttribute('d', 'm20 4-16 16');
   icon.append(first, second);
   parent.appendChild(icon);
 }
@@ -278,7 +443,7 @@ function appendStarIcon(document: Document, parent: Element, filled: boolean): v
   parent.appendChild(icon);
 }
 
-function speakWord(document: Document, word: string, language: 'en-GB' | 'en-US'): void {
+function speakWord(document: Document, word: string, language: 'en-GB' | 'en-US' | 'zh-CN'): void {
   const view = document.defaultView;
   if (view === null || typeof view.speechSynthesis?.speak !== 'function' || typeof view.SpeechSynthesisUtterance !== 'function') {
     return;
@@ -294,7 +459,7 @@ function appendSpeakerButton(
   document: Document,
   parent: Element,
   word: string,
-  language: 'en-GB' | 'en-US',
+  language: 'en-GB' | 'en-US' | 'zh-CN',
   label: string
 ): void {
   const button = document.createElement('button');
@@ -369,7 +534,7 @@ function updatePopoverScale(popover: HTMLElement, fontScale: number): void {
 
 function installSelectionCardScaling(
   popover: HTMLElement,
-  appearance: { fontScale: number }
+  appearance: SelectionCardAppearance
 ): ResizeObserver | undefined {
   const updateScale = (): void => updatePopoverScale(popover, appearance.fontScale);
   updateScale();
@@ -381,20 +546,28 @@ function installSelectionCardScaling(
   return observer;
 }
 
+const selectionCardObservers = new WeakMap<HTMLElement, ResizeObserver>();
+const selectionLookupVersions = new WeakMap<Document, number>();
+
+function removeSelectionPopover(popover: HTMLElement): void {
+  selectionCardObservers.get(popover)?.disconnect();
+  selectionCardObservers.delete(popover);
+  popover.remove();
+}
+
 function mountSelectionPopover(
-  document: Document,
   body: HTMLElement,
   popover: HTMLElement,
-  appearance: { fontScale: number }
+  appearance: SelectionCardAppearance
 ): void {
-  body.appendChild(popover);
-  const observer = installSelectionCardScaling(popover, appearance);
-  document.defaultView?.setTimeout(() => {
-    observer?.disconnect();
-    if (popover.parentElement !== null) {
-      popover.remove();
+  if (popover.parentElement === null) {
+    body.appendChild(popover);
+    const observer = installSelectionCardScaling(popover, appearance);
+    if (observer !== undefined) {
+      selectionCardObservers.set(popover, observer);
     }
-  }, 12000);
+  }
+  updatePopoverScale(popover, appearance.fontScale);
 }
 
 export function selectionFailureMessage(
@@ -422,28 +595,38 @@ function showSelectionTranslation(
   translated: string,
   errorCode?: TranslateFailureCode,
   anchorRect?: DOMRect,
-  onSearch?: (text: string) => void,
+  onSearch?: (text: string, card: HTMLElement) => void,
   purpose: SelectionPurpose = 'dictionary',
   dictionaryStore?: {
     recordHistory(entry: DictionaryEntry): Promise<void>;
     isFavorite(query: string): Promise<boolean>;
     toggleFavorite(entry: DictionaryEntry): Promise<boolean>;
   },
-  appearance: { theme: ThemeMode; fontScale: number } = { theme: 'system', fontScale: 1 },
-  appearanceStore?: { set(values: Record<string, unknown>): Promise<void> }
+  appearance: SelectionCardAppearance = { theme: 'system', cardColor: 'neutral', fontScale: 1 },
+  appearanceStore?: { set(values: Record<string, unknown>): Promise<void> },
+  learning: SelectionLearningOptions = {},
+  existingPopover?: HTMLElement
 ): void {
   const body = document.body;
   if (body === null) {
     return;
   }
-  document.querySelector('[data-hltv-zh-selection-result]')?.remove();
-
-  const popover = document.createElement('aside');
+  const reuseCard = existingPopover?.isConnected === true;
+  const previousCard = document.querySelector<HTMLElement>('[data-hltv-zh-selection-result]');
+  if (previousCard !== null && previousCard !== existingPopover) {
+    removeSelectionPopover(previousCard);
+  }
+  const popover = reuseCard ? existingPopover : document.createElement('aside');
+  popover.replaceChildren();
+  popover.setAttribute('aria-busy', 'false');
+  const englishUi = false;
   popover.setAttribute('data-hltv-zh-selection-result', '1');
   popover.setAttribute('data-hltv-zh-selection-ui', '1');
   popover.setAttribute('role', 'status');
-  popover.style.setProperty('--hltv-zh-scale', '1');
-  const applyCardTheme = (theme: ThemeMode): void => {
+  if (!reuseCard) {
+    popover.style.setProperty('--hltv-zh-scale', '1');
+  }
+  const applyCardTheme = (theme: ThemeMode, cardColor: CardColor): void => {
     const dark = theme === 'dark' || (
       theme === 'system' &&
       document.defaultView?.matchMedia?.('(prefers-color-scheme: dark)').matches === true
@@ -451,35 +634,39 @@ function showSelectionTranslation(
     popover.style.setProperty('--hltv-zh-card-text', dark ? '#f5f5f7' : '#1d1d1f');
     popover.style.setProperty('--hltv-zh-card-muted', dark ? '#a1a1a6' : '#6e6e73');
     popover.style.setProperty('--hltv-zh-card-control', dark ? '#a1a1a6' : '#86868b');
-    popover.style.setProperty('--hltv-zh-card-surface', dark ? 'rgba(28, 28, 30, 0.97)' : 'rgba(255, 255, 255, 0.96)');
-    popover.style.setProperty('background-color', dark ? 'rgba(28, 28, 30, 0.97)' : 'rgba(255, 255, 255, 0.96)');
+    const surface = CARD_COLOR_SURFACES[cardColor] ?? CARD_COLOR_SURFACES.neutral;
+    popover.style.setProperty('--hltv-zh-card-surface', dark ? surface.dark : surface.light);
+    popover.style.setProperty('background-color', 'var(--hltv-zh-card-surface)');
+    popover.style.setProperty('border-color', dark ? 'rgba(255, 255, 255, 0.16)' : 'rgba(60, 60, 67, 0.18)');
     popover.style.setProperty('color', 'var(--hltv-zh-card-text)');
   };
-  applyCardTheme(appearance.theme);
-  setStyles(popover, {
-    position: 'fixed',
-    right: '16px',
-    bottom: '16px',
-    zIndex: '2147483647',
-    width: 'min(440px, calc(100vw - 28px))',
-    minWidth: '300px',
-    minHeight: '180px',
-    maxWidth: 'calc(100vw - 28px)',
-    maxHeight: 'calc(100vh - 28px)',
-    resize: 'both',
-    overflow: 'auto',
-    boxSizing: 'border-box',
-    padding: 'calc(20px * var(--hltv-zh-scale)) calc(22px * var(--hltv-zh-scale)) calc(22px * var(--hltv-zh-scale))',
-    border: '1px solid rgba(60, 60, 67, 0.18)',
-    borderRadius: '16px',
-    backgroundColor: 'var(--hltv-zh-card-surface)',
-    color: 'var(--hltv-zh-card-text)',
-    boxShadow: '0 12px 32px rgba(0, 0, 0, 0.14), 0 2px 8px rgba(0, 0, 0, 0.08)',
-    backdropFilter: 'blur(20px) saturate(180%)',
-    fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, "Microsoft YaHei", sans-serif',
-    fontSize: 'calc(15px * var(--hltv-zh-scale))',
-    lineHeight: '1.5'
-  });
+  applyCardTheme(appearance.theme, appearance.cardColor);
+  if (!reuseCard) {
+    setStyles(popover, {
+      position: 'fixed',
+      right: '16px',
+      bottom: '16px',
+      zIndex: '2147483647',
+      width: 'min(440px, calc(100vw - 28px))',
+      minWidth: '300px',
+      minHeight: '180px',
+      maxWidth: 'calc(100vw - 28px)',
+      maxHeight: 'calc(100vh - 28px)',
+      resize: 'both',
+      overflow: 'auto',
+      boxSizing: 'border-box',
+      padding: 'calc(20px * var(--hltv-zh-scale)) calc(22px * var(--hltv-zh-scale)) calc(22px * var(--hltv-zh-scale))',
+      border: '1px solid rgba(60, 60, 67, 0.18)',
+      borderRadius: '16px',
+      backgroundColor: 'var(--hltv-zh-card-surface)',
+      color: 'var(--hltv-zh-card-text)',
+      boxShadow: '0 12px 32px rgba(0, 0, 0, 0.14), 0 2px 8px rgba(0, 0, 0, 0.08)',
+      backdropFilter: 'blur(20px) saturate(180%)',
+      fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, "Microsoft YaHei", sans-serif',
+      fontSize: 'calc(15px * var(--hltv-zh-scale))',
+      lineHeight: '1.5'
+    });
+  }
 
   const header = document.createElement('div');
   setStyles(header, {
@@ -556,38 +743,163 @@ function showSelectionTranslation(
   };
   const fontDown = createCompactControl('A−', '减小字号');
   const fontUp = createCompactControl('A+', '增大字号');
-  const themeButton = createCompactControl('◐', '切换词典卡片主题');
-  const themeLabel = (theme: ThemeMode): string => theme === 'system' ? '系统' : theme === 'light' ? '浅色' : '深色';
-  const updateThemeButton = (): void => {
-    themeButton.textContent = appearance.theme === 'system' ? '◐' : appearance.theme === 'light' ? '☀' : '☾';
-    themeButton.title = `当前主题：${themeLabel(appearance.theme)}，点击切换`;
+  const settingsButton = createCompactControl('', englishUi ? 'Open card settings' : '打开卡片设置');
+  appendSettingsIcon(document, settingsButton);
+  settingsButton.title = englishUi ? 'Card settings' : '卡片设置';
+  settingsButton.setAttribute('aria-expanded', 'false');
+  const settingsPanel = document.createElement('div');
+  settingsPanel.hidden = true;
+  settingsPanel.setAttribute('data-hltv-zh-card-settings', '1');
+  setStyles(settingsPanel, {
+    position: 'absolute',
+    top: 'calc(58px * var(--hltv-zh-scale))',
+    right: 'calc(14px * var(--hltv-zh-scale))',
+    width: 'calc(218px * var(--hltv-zh-scale))',
+    padding: 'calc(12px * var(--hltv-zh-scale))',
+    border: '1px solid rgba(60, 60, 67, 0.16)',
+    borderRadius: '14px',
+    backgroundColor: 'var(--hltv-zh-card-surface)',
+    color: 'var(--hltv-zh-card-text)',
+    boxShadow: '0 12px 28px rgba(0, 0, 0, 0.16)',
+    backdropFilter: 'blur(20px) saturate(180%)',
+    zIndex: '3'
+  });
+  const settingsTitle = document.createElement('div');
+  settingsTitle.textContent = englishUi ? 'Card settings' : '卡片设置';
+  setStyles(settingsTitle, { fontWeight: '600' });
+  const settingsHeader = document.createElement('div');
+  setStyles(settingsHeader, {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 'calc(8px * var(--hltv-zh-scale))',
+    marginBottom: 'calc(10px * var(--hltv-zh-scale))'
+  });
+  const settingsClose = createCompactControl('', '关闭卡片设置');
+  settingsClose.title = '关闭卡片设置';
+  appendCloseIcon(document, settingsClose);
+  settingsClose.addEventListener('click', () => {
+    settingsPanel.hidden = true;
+    settingsButton.setAttribute('aria-expanded', 'false');
+    settingsButton.focus();
+  });
+  settingsHeader.append(settingsTitle, settingsClose);
+  const settingsSection = (label: string): HTMLElement => {
+    const section = document.createElement('div');
+    const heading = document.createElement('div');
+    heading.textContent = label;
+    setStyles(heading, {
+      color: 'var(--hltv-zh-card-muted)',
+      fontSize: 'calc(12px * var(--hltv-zh-scale))',
+      margin: 'calc(8px * var(--hltv-zh-scale)) 0 calc(5px * var(--hltv-zh-scale))'
+    });
+    section.appendChild(heading);
+    return section;
+  };
+  const settingsChoices = (buttons: readonly HTMLButtonElement[]): HTMLElement => {
+    const row = document.createElement('div');
+    setStyles(row, { display: 'flex', gap: 'calc(6px * var(--hltv-zh-scale))', flexWrap: 'wrap' });
+    row.append(...buttons);
+    return row;
+  };
+  const makeChoiceButton = (label: string, ariaLabel: string): HTMLButtonElement => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = label;
+    button.setAttribute('aria-label', ariaLabel);
+    setStyles(button, {
+      border: '1px solid rgba(60, 60, 67, 0.18)',
+      borderRadius: '9px',
+      padding: 'calc(5px * var(--hltv-zh-scale)) calc(8px * var(--hltv-zh-scale))',
+      backgroundColor: 'transparent',
+      color: 'var(--hltv-zh-card-text)',
+      cursor: 'pointer',
+      fontFamily: 'inherit',
+      fontSize: 'calc(12px * var(--hltv-zh-scale))'
+    });
+    return button;
   };
   const persistAppearance = (): void => {
     if (appearanceStore !== undefined) {
       void appearanceStore.set({
         theme: appearance.theme,
+        cardColor: appearance.cardColor,
         fontScale: clampFontScale(appearance.fontScale)
       }).catch(() => {});
     }
   };
-  fontDown.addEventListener('click', () => {
-    appearance.fontScale = clampFontScale(appearance.fontScale - 0.05);
+  const themeChoices = [
+    ['system', englishUi ? 'System' : '跟随系统'],
+    ['light', englishUi ? 'Light' : '浅色'],
+    ['dark', englishUi ? 'Dark' : '深色']
+  ] as const;
+  const themeButtons = themeChoices.map(([value, label]) => {
+    const button = makeChoiceButton(label, `${englishUi ? 'Theme' : '主题'}：${label}`);
+    button.addEventListener('click', () => {
+      appearance.theme = value;
+      applyCardTheme(appearance.theme, appearance.cardColor);
+      updateThemeChoices();
+      persistAppearance();
+    });
+    return button;
+  });
+  const updateThemeChoices = (): void => {
+    themeButtons.forEach((button, index) => {
+      const value = themeChoices[index]?.[0];
+      button.style.backgroundColor = value === appearance.theme ? 'rgba(0, 122, 255, 0.14)' : 'transparent';
+      button.style.borderColor = value === appearance.theme ? '#007aff' : 'rgba(60, 60, 67, 0.18)';
+    });
+  };
+  const colorChoices: readonly [CardColor, string][] = [
+    ['neutral', englishUi ? 'Neutral' : '中性'],
+    ['blue', englishUi ? 'Blue' : '蓝'],
+    ['green', englishUi ? 'Green' : '绿'],
+    ['sand', englishUi ? 'Sand' : '沙色'],
+    ['rose', englishUi ? 'Rose' : '玫瑰']
+  ];
+  const colorButtons = colorChoices.map(([value, label]) => {
+    const button = makeChoiceButton(label, `${englishUi ? 'Card color' : '卡片颜色'}：${label}`);
+    // Swatches are always light, so their labels must stay dark even when the
+    // surrounding card switches to a dark theme.
+    setStyles(button, { color: '#1d1d1f', fontWeight: '600', textShadow: 'none', colorScheme: 'light' });
+    button.addEventListener('click', () => {
+      appearance.cardColor = value;
+      applyCardTheme(appearance.theme, appearance.cardColor);
+      updateColorChoices();
+      persistAppearance();
+    });
+    return button;
+  });
+  const updateColorChoices = (): void => {
+    colorButtons.forEach((button, index) => {
+      const value = colorChoices[index]?.[0];
+      const surface = value === undefined ? CARD_COLOR_SURFACES.neutral : CARD_COLOR_SURFACES[value];
+      button.style.backgroundColor = surface.swatch;
+      button.style.borderColor = value === appearance.cardColor ? '#007aff' : 'rgba(60, 60, 67, 0.18)';
+      button.style.boxShadow = value === appearance.cardColor ? '0 0 0 2px rgba(0, 122, 255, 0.18)' : 'none';
+      button.setAttribute('aria-pressed', String(value === appearance.cardColor));
+    });
+  };
+  const fontSection = settingsSection(englishUi ? 'Font size' : '字号');
+  fontSection.appendChild(settingsChoices([fontDown, fontUp]));
+  const themeSection = settingsSection(englishUi ? 'Appearance' : '明暗模式');
+  themeSection.appendChild(settingsChoices(themeButtons));
+  const colorSection = settingsSection(englishUi ? 'Card color' : '卡片颜色');
+  colorSection.appendChild(settingsChoices(colorButtons));
+  settingsPanel.append(settingsHeader, fontSection, themeSection, colorSection);
+  const updateFontScale = (delta: number): void => {
+    appearance.fontScale = clampFontScale(appearance.fontScale + delta);
     updatePopoverScale(popover, appearance.fontScale);
     persistAppearance();
+  };
+  fontDown.addEventListener('click', () => updateFontScale(-0.05));
+  fontUp.addEventListener('click', () => updateFontScale(0.05));
+  settingsButton.addEventListener('click', () => {
+    settingsPanel.hidden = !settingsPanel.hidden;
+    settingsButton.setAttribute('aria-expanded', String(!settingsPanel.hidden));
   });
-  fontUp.addEventListener('click', () => {
-    appearance.fontScale = clampFontScale(appearance.fontScale + 0.05);
-    updatePopoverScale(popover, appearance.fontScale);
-    persistAppearance();
-  });
-  themeButton.addEventListener('click', () => {
-    appearance.theme = nextThemeMode(appearance.theme);
-    applyCardTheme(appearance.theme);
-    updateThemeButton();
-    persistAppearance();
-  });
-  updateThemeButton();
-  controls.append(fontDown, fontUp, themeButton);
+  updateThemeChoices();
+  updateColorChoices();
   let favoriteButton: HTMLButtonElement | undefined;
   if (purpose === 'dictionary' && dictionaryStore !== undefined) {
     favoriteButton = document.createElement('button');
@@ -618,17 +930,22 @@ function showSelectionTranslation(
     void dictionaryStore.isFavorite(original).then(updateFavorite).catch(() => {});
     favoriteButton.addEventListener('click', () => {
       const data = parseDictionaryTranslation(translated);
-      const baseForm = data.baseForm ?? inferRegularPastBaseForm(original, data.definitions);
+      const parsedBaseForm = data.baseForm ?? inferRegularPastBaseForm(original, data.definitions);
+      const baseForm = parsedBaseForm !== undefined && shouldShowBaseForm(original, parsedBaseForm)
+        ? parsedBaseForm
+        : undefined;
       const entry: DictionaryEntry = {
         query: original,
         translated,
         ...(baseForm === undefined ? {} : { baseForm }),
         englishMeaning: data.definitions.map((item) => item.englishMeaning).filter((item): item is string => item !== undefined).join('；'),
+        ...(data.difficulty === undefined ? {} : { difficulty: data.difficulty }),
+        ...(data.pinyin === undefined ? {} : { pinyin: data.pinyin }),
+        ...(data.examples === undefined ? {} : { examples: data.examples }),
         savedAt: Date.now()
       };
       void dictionaryStore.toggleFavorite(entry).then(updateFavorite).catch(() => {});
     });
-    controls.append(favoriteButton);
   }
   const close = document.createElement('button');
   close.type = 'button';
@@ -647,14 +964,46 @@ function showSelectionTranslation(
   });
   installIconButtonHover(close);
   appendCloseIcon(document, close);
-  close.addEventListener('click', () => popover.remove());
+  // All three header controls share the same circle and cannot flex-shrink.
+  for (const control of [settingsButton, search, close]) {
+    setStyles(control, {
+      width: 'calc(32px * var(--hltv-zh-scale))',
+      minWidth: 'calc(32px * var(--hltv-zh-scale))',
+      height: 'calc(32px * var(--hltv-zh-scale))',
+      padding: '0',
+      boxSizing: 'border-box',
+      flexShrink: '0',
+      lineHeight: '1'
+    });
+  }
+  close.addEventListener('click', () => removeSelectionPopover(popover));
+  let loadingStatus: HTMLElement | undefined;
   const submitSearch = (): void => {
     const nextText = title.value.trim();
     if (nextText.length === 0 || onSearch === undefined) {
       return;
     }
-    popover.remove();
-    onSearch(nextText);
+    if (loadingStatus === undefined) {
+      loadingStatus = document.createElement('div');
+      loadingStatus.setAttribute('role', 'status');
+      setStyles(loadingStatus, {
+        color: 'var(--hltv-zh-card-muted)',
+        fontSize: 'calc(14px * var(--hltv-zh-scale))',
+        marginTop: 'calc(8px * var(--hltv-zh-scale))',
+        wordBreak: 'break-word'
+      });
+      header.after(loadingStatus);
+    }
+    if (!canTranslateSelection(nextText, learning.nativeLanguage)) {
+      loadingStatus.textContent = '请输入要查询的英文单词或句子。';
+      return;
+    }
+    loadingStatus.textContent = `正在查询「${nextText}」…`;
+    popover.setAttribute('aria-busy', 'true');
+    if (favoriteButton !== undefined) {
+      favoriteButton.disabled = true;
+    }
+    onSearch(nextText, popover);
   };
   search.addEventListener('click', submitSearch);
   title.addEventListener('keydown', (event) => {
@@ -663,8 +1012,9 @@ function showSelectionTranslation(
       submitSearch();
     }
   });
-  controls.append(search, close);
+  controls.append(settingsButton, search, close);
   header.append(title, controls);
+  popover.appendChild(settingsPanel);
 
   const divider = document.createElement('div');
   setStyles(divider, {
@@ -686,8 +1036,10 @@ function showSelectionTranslation(
       whiteSpace: 'pre-wrap'
     });
     popover.append(header, divider, result);
-    positionResultPopover(popover, anchorRect, document);
-    mountSelectionPopover(document, body, popover, appearance);
+    if (!reuseCard) {
+      positionResultPopover(popover, anchorRect, document);
+    }
+    mountSelectionPopover(body, popover, appearance);
     return;
   }
 
@@ -701,35 +1053,54 @@ function showSelectionTranslation(
       wordBreak: 'break-word',
       whiteSpace: 'pre-wrap'
     });
-    popover.append(header, divider, result);
-    mountSelectionPopover(document, body, popover, appearance);
+    if (learning.audienceMode === 'learner' || learning.showOriginal === true) {
+      const originalNode = document.createElement('div');
+      originalNode.textContent = original;
+      setStyles(originalNode, {
+        color: 'var(--hltv-zh-card-muted)',
+        fontSize: 'calc(15px * var(--hltv-zh-scale))',
+        lineHeight: '1.45',
+        marginBottom: 'calc(10px * var(--hltv-zh-scale))',
+        whiteSpace: 'pre-wrap'
+      });
+      popover.append(header, divider, originalNode, result);
+    } else {
+      popover.append(header, divider, result);
+    }
+    mountSelectionPopover(body, popover, appearance);
     return;
   }
 
   const data = parseDictionaryTranslation(translated);
-  const baseForm = data.baseForm ?? inferRegularPastBaseForm(original, data.definitions);
+  const parsedBaseForm = data.baseForm ?? inferRegularPastBaseForm(original, data.definitions);
+  const baseForm = parsedBaseForm !== undefined && shouldShowBaseForm(original, parsedBaseForm)
+    ? parsedBaseForm
+    : undefined;
   let baseNode: HTMLElement | undefined;
   if (baseForm !== undefined) {
     const base = document.createElement('div');
     setStyles(base, {
       color: 'var(--hltv-zh-card-muted)',
       fontSize: 'calc(15px * var(--hltv-zh-scale))',
-      marginBottom: 'calc(10px * var(--hltv-zh-scale))'
+      marginTop: 'calc(14px * var(--hltv-zh-scale))',
+      paddingTop: 'calc(10px * var(--hltv-zh-scale))',
+      borderTop: '1px solid rgba(60, 60, 67, 0.14)'
     });
     const baseLabel = document.createElement('strong');
-    baseLabel.textContent = '动词原形  ';
+    baseLabel.textContent = englishUi ? 'Base form  ' : '动词原形  ';
     const baseValue = document.createElement('span');
     baseValue.textContent = baseForm;
     setStyles(baseValue, { color: 'var(--hltv-zh-card-text)' });
     base.append(baseLabel, baseValue);
     baseNode = base;
   }
-  if (data.ukPronunciation !== undefined || data.usPronunciation !== undefined) {
+  if (data.ukPronunciation !== undefined || data.usPronunciation !== undefined || favoriteButton !== undefined) {
     const pronunciation = document.createElement('div');
     setStyles(pronunciation, {
       display: 'flex',
       flexWrap: 'wrap',
       gap: 'calc(16px * var(--hltv-zh-scale))',
+      alignItems: 'center',
       color: 'var(--hltv-zh-card-muted)',
       fontSize: 'calc(15px * var(--hltv-zh-scale))',
       marginBottom: 'calc(8px * var(--hltv-zh-scale))'
@@ -757,12 +1128,36 @@ function showSelectionTranslation(
       item.append(labelNode, speaker);
       pronunciation.appendChild(item);
     }
+    if (favoriteButton !== undefined) {
+      setStyles(favoriteButton, { marginLeft: 'auto' });
+      pronunciation.appendChild(favoriteButton);
+    }
     popover.append(header, divider, pronunciation);
   } else {
     popover.append(header, divider);
   }
-  if (baseNode !== undefined) {
-    popover.appendChild(baseNode);
+
+  if (learning.showPinyin !== false && data.pinyin !== undefined) {
+    const pinyin = document.createElement('div');
+    pinyin.textContent = `${englishUi ? 'Pinyin' : '拼音'}  ${data.pinyin}`;
+    setStyles(pinyin, {
+      color: 'var(--hltv-zh-card-muted)',
+      marginBottom: 'calc(8px * var(--hltv-zh-scale))'
+    });
+    const speaker = document.createElement('span');
+    setStyles(speaker, { display: 'inline-flex', marginLeft: 'calc(6px * var(--hltv-zh-scale))' });
+    appendSpeakerButton(document, speaker, original, 'zh-CN', englishUi ? 'Chinese' : '中文');
+    pinyin.appendChild(speaker);
+    popover.appendChild(pinyin);
+  }
+  if (learning.showDifficulty !== false && data.difficulty !== undefined) {
+    const level = document.createElement('div');
+    level.textContent = `${englishUi ? 'Oxford / CEFR level' : 'Oxford/CEFR 难度'}  ${data.difficulty}`;
+    setStyles(level, {
+      color: 'var(--hltv-zh-card-muted)',
+      marginBottom: 'calc(8px * var(--hltv-zh-scale))'
+    });
+    popover.appendChild(level);
   }
 
   const definitions = document.createElement('div');
@@ -778,7 +1173,7 @@ function showSelectionTranslation(
       gap: 'calc(10px * var(--hltv-zh-scale))'
     });
     const partOfSpeech = document.createElement('span');
-    partOfSpeech.textContent = `${definition.partOfSpeech}.`;
+    partOfSpeech.textContent = definition.partOfSpeech;
     setStyles(partOfSpeech, { color: 'var(--hltv-zh-card-muted)', fontWeight: '600', letterSpacing: '-0.1px' });
     const meaning = document.createElement('span');
     meaning.textContent = definition.meaning;
@@ -799,23 +1194,41 @@ function showSelectionTranslation(
     definitions.appendChild(row);
   }
   popover.appendChild(definitions);
+  if (learning.showExamples !== false && data.examples !== undefined) {
+    const examples = document.createElement('div');
+    examples.textContent = `${englishUi ? 'Example' : '例句'}  ${data.examples.join('；')}`;
+    setStyles(examples, {
+      color: 'var(--hltv-zh-card-muted)',
+      marginTop: 'calc(12px * var(--hltv-zh-scale))',
+      whiteSpace: 'pre-wrap'
+    });
+    popover.appendChild(examples);
+  }
   if (data.networkMeaning !== undefined) {
     const network = document.createElement('div');
-    network.textContent = `网络  ${data.networkMeaning}`;
+    network.textContent = `${englishUi ? 'Web meaning' : '网络'}  ${data.networkMeaning}`;
     setStyles(network, {
       color: 'var(--hltv-zh-card-muted)',
       marginTop: 'calc(12px * var(--hltv-zh-scale))'
     });
     popover.appendChild(network);
   }
-  positionResultPopover(popover, anchorRect, document);
-  mountSelectionPopover(document, body, popover, appearance);
+  if (baseNode !== undefined) {
+    popover.appendChild(baseNode);
+  }
+  if (!reuseCard) {
+    positionResultPopover(popover, anchorRect, document);
+  }
+  mountSelectionPopover(body, popover, appearance);
   if (dictionaryStore !== undefined) {
     const dataEntry: DictionaryEntry = {
       query: original,
       translated,
       ...(baseForm === undefined ? {} : { baseForm }),
       englishMeaning: data.definitions.map((item) => item.englishMeaning).filter((item): item is string => item !== undefined).join('；'),
+      ...(data.difficulty === undefined ? {} : { difficulty: data.difficulty }),
+      ...(data.pinyin === undefined ? {} : { pinyin: data.pinyin }),
+      ...(data.examples === undefined ? {} : { examples: data.examples }),
       savedAt: Date.now()
     };
     void dictionaryStore.recordHistory(dataEntry).catch(() => {});
@@ -880,9 +1293,16 @@ async function lookupSelection(
     isFavorite(query: string): Promise<boolean>;
     toggleFavorite(entry: DictionaryEntry): Promise<boolean>;
   },
-  appearance: { theme: ThemeMode; fontScale: number } = { theme: 'system', fontScale: 1 },
-  appearanceStore?: { set(values: Record<string, unknown>): Promise<void> }
+  appearance: SelectionCardAppearance = { theme: 'system', cardColor: 'neutral', fontScale: 1 },
+  appearanceStore?: { set(values: Record<string, unknown>): Promise<void> },
+  learning: SelectionLearningOptions = {},
+  existingPopover?: HTMLElement
 ): Promise<void> {
+  if (!canTranslateSelection(text, learning.nativeLanguage)) {
+    return;
+  }
+  const version = (selectionLookupVersions.get(document) ?? 0) + 1;
+  selectionLookupVersions.set(document, version);
   const purpose = classifySelectionPurpose(text);
   const context = purpose === 'dictionary' ? 'structured' : 'prose';
   let result: DetailedTranslationResult;
@@ -903,22 +1323,30 @@ async function lookupSelection(
   } catch {
     result = { translations: [text], errorCode: 'provider-failure' };
   }
+  // Ignore superseded responses and never reopen a card closed during a request.
+  if (selectionLookupVersions.get(document) !== version ||
+      (existingPopover !== undefined && !existingPopover.isConnected)) {
+    return;
+  }
   showSelectionTranslation(
     document,
     text,
     result.translations[0] ?? text,
     result.errorCode,
     anchorRect,
-    (nextText) => void lookupSelection(document, translator, nextText, anchorRect, dictionaryStore),
+    (nextText, card) => void lookupSelection(document, translator, nextText, anchorRect, dictionaryStore, appearance, appearanceStore, learning, card),
     purpose,
     dictionaryStore,
     appearance,
-    appearanceStore
+    appearanceStore,
+    learning,
+    existingPopover
   );
 }
 
 export interface SelectionMagnifierController {
-  setAppearance(appearance: { theme: ThemeMode; fontScale: number }): void;
+  setAppearance(appearance: SelectionCardAppearance): void;
+  setLearningOptions(options: SelectionLearningOptions): void;
 }
 
 export function installSelectionMagnifier(options: {
@@ -935,11 +1363,13 @@ export function installSelectionMagnifier(options: {
     isFavorite(query: string): Promise<boolean>;
     toggleFavorite(entry: DictionaryEntry): Promise<boolean>;
   };
-  appearance?: { theme: ThemeMode; fontScale: number };
+  appearance?: SelectionCardAppearance;
   appearanceStore?: { set(values: Record<string, unknown>): Promise<void> };
+  learning?: SelectionLearningOptions;
 }): SelectionMagnifierController | undefined {
   const { document, translator, dictionaryStore } = options;
-  let appearance = options.appearance ?? { theme: 'system' as const, fontScale: 1 };
+  let appearance = options.appearance ?? { theme: 'system' as const, cardColor: 'neutral' as const, fontScale: 1 };
+  let learning = { ...(options.learning ?? {}) };
   const view = document.defaultView;
   if (view === null || view === undefined || document.body === null) {
     return undefined;
@@ -968,6 +1398,10 @@ export function installSelectionMagnifier(options: {
         removeButton();
         return;
       }
+      if (!canTranslateSelection(current.text, learning.nativeLanguage)) {
+        removeButton();
+        return;
+      }
       removeButton();
       selectedText = current.text;
       button = document.createElement('button');
@@ -982,11 +1416,12 @@ export function installSelectionMagnifier(options: {
         padding: '0',
         border: '1px solid rgba(60, 60, 67, 0.24)',
         borderRadius: '50%',
-        backgroundColor: 'rgba(255, 255, 255, 0.96)',
+        backgroundColor: 'rgba(255, 255, 255, 0.42)',
+        backgroundImage: 'linear-gradient(145deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.18))',
         color: '#1d1d1f',
         cursor: 'pointer',
-        boxShadow: '0 4px 14px rgba(0, 0, 0, 0.16), 0 1px 4px rgba(0, 0, 0, 0.08)',
-        backdropFilter: 'blur(16px) saturate(180%)',
+        boxShadow: '0 8px 20px rgba(0, 0, 0, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.65)',
+        backdropFilter: 'blur(18px) saturate(190%)',
         zIndex: '2147483647',
         display: 'inline-flex',
         alignItems: 'center',
@@ -1000,7 +1435,7 @@ export function installSelectionMagnifier(options: {
         const text = selectedText;
         removeButton();
         if (text !== undefined) {
-          void lookupSelection(document, translator, text, current.rect, dictionaryStore, appearance, options.appearanceStore);
+          void lookupSelection(document, translator, text, current.rect, dictionaryStore, appearance, options.appearanceStore, learning);
         }
       });
       document.body?.appendChild(button);
@@ -1019,8 +1454,12 @@ export function installSelectionMagnifier(options: {
     setAppearance(next) {
       appearance = {
         theme: next.theme,
+        cardColor: next.cardColor,
         fontScale: Math.max(0.8, Math.min(1.25, next.fontScale))
       };
+    },
+    setLearningOptions(next) {
+      learning = { ...next };
     }
   };
 }

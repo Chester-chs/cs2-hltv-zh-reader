@@ -25,6 +25,22 @@ main {
   gap: 18px;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.header-actions select {
+  min-height: 34px;
+  border: 1px solid color-mix(in srgb, CanvasText 18%, transparent);
+  border-radius: 999px;
+  padding: 0 10px;
+  color: CanvasText;
+  background: Canvas;
+  font: inherit;
+}
+
 .page-header {
   margin-bottom: 28px;
 }
@@ -151,6 +167,22 @@ button:focus-visible {
   padding: 0;
   color: #b8860b;
   font-size: 21px;
+}
+
+.review-answer,
+.review-controls button {
+  min-height: 32px;
+  margin-top: 8px;
+  padding: 0 12px;
+  border-radius: 9px;
+  color: Highlight;
+}
+
+.review-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
 }
 
 .empty {

@@ -17,13 +17,22 @@ export interface ContentSettingsChange {
 export type ContentSettingKey =
   | 'enabled'
   | 'mode'
+  | 'nativeLanguage'
+  | 'audienceMode'
+  | 'uiLanguage'
   | 'providerPreset'
   | 'baseURL'
   | 'model'
   | 'apiKey'
   | 'useJsonOutputMode'
+  | 'translationStyle'
   | 'theme'
+  | 'cardColor'
   | 'fontScale'
+  | 'showOriginal'
+  | 'showPinyin'
+  | 'showDifficulty'
+  | 'showExamples'
   | 'permissionRevision';
 
 export type ContentSettingsChanges = Partial<
@@ -35,7 +44,8 @@ const providerSettingKeys: readonly ContentSettingKey[] = [
   'baseURL',
   'model',
   'apiKey',
-  'useJsonOutputMode'
+  'useJsonOutputMode',
+  'translationStyle'
 ];
 
 export async function applyContentSettingsChanges(

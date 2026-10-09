@@ -3,82 +3,88 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CS2 HLTV 中文翻译设置</title>
+    <title>CS2 HLTV 翻译设置</title>
     <link rel="stylesheet" href="/options.css" />
   </head>
   <body>
     <main>
-      <h1>翻译设置</h1>
-      <p class="privacy-note">
+      <h1 id="options-title" data-i18n="options-title">翻译设置</h1>
+      <p id="privacy-note" class="privacy-note" data-i18n="privacy-note">
         API Key 仅保存在此浏览器的 browser.storage.local，不会同步到云端或发送给扩展开发者。翻译或测试连接时，扩展会将它发送给你配置的服务商。扩展只申请你配置域名的访问权限。
       </p>
 
       <form id="settings-form">
         <label class="check-row">
           <input id="enabled" type="checkbox" />
-          <span>启用翻译</span>
+          <span data-i18n="enabled">启用翻译</span>
         </label>
 
-        <label for="mode">显示模式</label>
+        <label for="mode" data-i18n="mode-label">显示模式</label>
         <select id="mode">
-          <option value="A">模式 A：完全翻译</option>
-          <option value="B">模式 B：双语对照</option>
+          <option value="A" data-i18n="mode-a">模式 A：完全翻译</option>
+          <option value="B" data-i18n="mode-b">模式 B：双语对照</option>
         </select>
 
-        <label for="provider-preset">服务商预设</label>
+        <label for="provider-preset" data-i18n="provider-preset-label">服务商预设</label>
         <select id="provider-preset">
           <option value="deepseek">DeepSeek</option>
           <option value="openai">OpenAI</option>
-          <option value="custom">自定义</option>
+          <option value="custom" data-i18n="custom-provider">自定义</option>
         </select>
 
-        <label for="base-url">baseURL</label>
+        <label for="base-url" data-i18n="base-url-label">baseURL</label>
         <input id="base-url" type="url" autocomplete="url" spellcheck="false" required />
 
-        <label for="model">模型名</label>
+        <label for="model" data-i18n="model-label">模型名</label>
         <input id="model" type="text" autocomplete="off" required />
 
-        <label for="api-key">API Key</label>
-        <p class="field-help">
+        <label for="translation-style" data-i18n="translation-style-label">翻译风格</label>
+        <select id="translation-style">
+          <option value="natural" data-i18n="translation-style-natural">自然中文：更像中文网站</option>
+          <option value="literal" data-i18n="translation-style-literal">直译：尽量贴近英文结构</option>
+        </select>
+
+        <label for="api-key" data-i18n="api-key-label">API Key</label>
+        <p class="field-help" data-i18n="api-key-help">
           主导航和已收录的固定标签可离线翻译。新闻标题、正文等自由文本需要有效 API Key、服务商域名授权和网络连接。
         </p>
         <div class="password-row">
           <input id="api-key" type="password" autocomplete="off" />
-          <button id="toggle-key" type="button" class="secondary">显示</button>
+          <button id="toggle-key" type="button" class="secondary" data-i18n="show-key">显示</button>
         </div>
 
         <label class="check-row json-mode">
           <input id="json-output" type="checkbox" />
-          <span>使用 JSON 输出模式（推荐）</span>
+          <span data-i18n="json-mode">使用 JSON 输出模式（推荐）</span>
         </label>
-        <p class="field-help">
+        <p class="field-help" data-i18n="json-help">
           若服务商不支持 response_format 并因此报错，可取消勾选。关闭后扩展仍要求模型只输出 JSON。
         </p>
 
         <section class="fallback-panel">
           <label class="check-row" for="fallback-enabled">
             <input id="fallback-enabled" type="checkbox" />
-            <span>启用备用翻译服务</span>
+            <span data-i18n="fallback-enabled">启用备用翻译服务</span>
           </label>
-          <p class="field-help">主服务商失败时自动尝试备用服务商；备用服务商需要单独授权和 API Key。</p>
-          <label for="fallback-base-url">备用 baseURL</label>
+          <p class="field-help" data-i18n="fallback-help">主服务商失败时自动尝试备用服务商；备用服务商需要单独授权和 API Key。</p>
+          <label for="fallback-base-url" data-i18n="fallback-base-url-label">备用 baseURL</label>
           <input id="fallback-base-url" type="url" autocomplete="url" spellcheck="false" placeholder="https://api.openai.com" />
-          <label for="fallback-model">备用模型名</label>
+          <label for="fallback-model" data-i18n="fallback-model-label">备用模型名</label>
           <input id="fallback-model" type="text" autocomplete="off" placeholder="gpt-4o-mini" />
-          <label for="fallback-api-key">备用 API Key</label>
+          <label for="fallback-api-key" data-i18n="fallback-api-key-label">备用 API Key</label>
           <input id="fallback-api-key" type="password" autocomplete="off" />
         </section>
 
         <section class="permission-panel" aria-live="polite">
-          <strong>服务商域名权限</strong>
+          <strong data-i18n="permission-title">服务商域名权限</strong>
           <p id="permission-status">正在检查权限…</p>
-          <button id="authorize" type="button" class="secondary" hidden>授权</button>
+          <button id="authorize" type="button" class="secondary" data-i18n="authorize" hidden>授权</button>
         </section>
 
         <div class="actions">
-          <button id="save" type="submit">保存</button>
-          <button id="test-connection" type="button" class="secondary">测试连接</button>
-          <button id="clear-cache" type="button" class="secondary">清空翻译缓存</button>
+          <button id="save" type="submit" data-i18n="save">保存</button>
+          <button id="test-connection" type="button" class="secondary" data-i18n="test-connection">测试连接</button>
+          <button id="clear-cache" type="button" class="secondary" data-i18n="clear-cache">清空翻译缓存</button>
         </div>
       </form>
 

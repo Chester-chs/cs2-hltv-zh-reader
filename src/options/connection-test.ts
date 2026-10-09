@@ -101,6 +101,7 @@ export async function testProviderConnection(
       apiKey: settings.apiKey,
       timeoutMs,
       useJsonOutputMode: settings.useJsonOutputMode,
+      translationStyle: settings.translationStyle,
       transport
     });
   } catch {

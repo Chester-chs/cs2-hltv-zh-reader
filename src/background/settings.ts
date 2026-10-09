@@ -3,7 +3,8 @@ import {
   PROVIDER_PRESETS,
   type DisplayMode,
   type ExtensionSettings,
-  type ProviderPreset
+  type ProviderPreset,
+  type TranslationStyle
 } from '../shared/settings.ts';
 import { parseProviderBaseURL } from '../shared/provider-url.ts';
 
@@ -18,6 +19,10 @@ function readBoolean(value: unknown, fallback: boolean): boolean {
 
 function readMode(value: unknown): DisplayMode {
   return value === 'B' ? 'B' : 'A';
+}
+
+function readTranslationStyle(value: unknown): TranslationStyle {
+  return value === 'literal' ? 'literal' : 'natural';
 }
 
 function readString(value: unknown, fallback: string): string {
@@ -72,6 +77,7 @@ function normalizeSettings(values: Record<string, unknown>): ExtensionSettings {
       values.useJsonOutputMode,
       DEFAULT_SETTINGS.useJsonOutputMode
     ),
+    translationStyle: readTranslationStyle(values.translationStyle),
     ...(hasFallback
       ? {
           fallbackEnabled: readBoolean(values.fallbackEnabled, false),

@@ -8,6 +8,9 @@ export interface DictionaryEntry {
   translated: string;
   baseForm?: string;
   englishMeaning?: string;
+  difficulty?: string;
+  pinyin?: string;
+  examples?: string[];
   savedAt: number;
 }
 
@@ -33,6 +36,9 @@ function parseEntry(value: unknown): DictionaryEntry | undefined {
     translated: value.translated,
     ...(typeof value.baseForm === 'string' ? { baseForm: value.baseForm } : {}),
     ...(typeof value.englishMeaning === 'string' ? { englishMeaning: value.englishMeaning } : {}),
+    ...(typeof value.difficulty === 'string' ? { difficulty: value.difficulty } : {}),
+    ...(typeof value.pinyin === 'string' ? { pinyin: value.pinyin } : {}),
+    ...(Array.isArray(value.examples) && value.examples.every((item) => typeof item === 'string') ? { examples: value.examples as string[] } : {}),
     savedAt: typeof value.savedAt === 'number' ? value.savedAt : 0
   };
 }

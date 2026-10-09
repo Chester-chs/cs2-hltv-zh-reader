@@ -11,15 +11,19 @@
       <header class="page-header">
         <div>
           <p class="eyebrow">CS2 HLTV 中文阅读器</p>
-          <h1>词典历史</h1>
+          <h1 id="history-title">词典历史</h1>
           <p id="summary">正在读取…</p>
         </div>
-        <button id="close" class="quiet" type="button">关闭</button>
+        <div class="header-actions">
+          <button id="close" class="quiet" type="button">关闭</button>
+        </div>
       </header>
 
       <nav class="filters" aria-label="词典记录筛选">
-        <button class="filter active" type="button" data-filter="all">全部</button>
-        <button class="filter" type="button" data-filter="favorites">收藏</button>
+        <button id="filter-all" class="filter active" type="button" data-filter="all">全部</button>
+        <button id="filter-favorites" class="filter" type="button" data-filter="favorites">收藏</button>
+        <button id="review" class="quiet" type="button">开始复习</button>
+        <button id="export" class="quiet" type="button">导出 CSV</button>
         <button id="clear" class="quiet danger" type="button">清空当前列表</button>
       </nav>
 

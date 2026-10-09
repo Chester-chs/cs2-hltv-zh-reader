@@ -13,10 +13,12 @@ const { test } = (await import(nodeTestModuleName)) as {
 
 import {
   clampFontScale,
+  canTranslateSelection,
   classifySelectionPurpose,
   inferRegularPastBaseForm,
   nextThemeMode,
   parseDictionaryTranslation,
+  shouldShowBaseForm,
   selectionFailureMessage
 } from '../src/content/selection-translation.ts';
 import { createBackgroundTranslationService } from '../src/content/background-translator.ts';
@@ -39,8 +41,8 @@ test('dictionary translation parser preserves pronunciations, parts of speech, a
     ukPronunciation: '/bent/',
     usPronunciation: '/bɛnt/',
     definitions: [
-      { partOfSpeech: '形容词', meaning: '被安排替补' },
-      { partOfSpeech: '动词', meaning: '让……坐替补席' }
+      { partOfSpeech: 'adj.', meaning: '被安排替补' },
+      { partOfSpeech: 'v.', meaning: '让……坐替补席' }
     ],
     networkMeaning: '冷板凳'
   });
@@ -51,10 +53,67 @@ test('dictionary parser keeps Oxford-style Chinese and English explanations toge
     parseDictionaryTranslation('动词：把人换下场 || to replace a player during a game'),
     {
       definitions: [{
-        partOfSpeech: '动词',
+        partOfSpeech: 'v.',
         meaning: '把人换下场',
         englishMeaning: 'to replace a player during a game'
       }]
+    }
+  );
+});
+
+test('dictionary parser normalizes provider labels and Oxford difficulty', () => {
+  assert.deepEqual(
+    parseDictionaryTranslation('词性：动词；中文释义：宣布；宣告；公布；concise English definition：to make a public statement；Oxford/CEFR 难度：B1；网络：官宣'),
+    {
+      difficulty: 'B1',
+      definitions: [{
+        partOfSpeech: 'v.',
+        meaning: '宣布；宣告；公布',
+        englishMeaning: 'to make a public statement'
+      }],
+      networkMeaning: '官宣'
+    }
+  );
+});
+
+test('dictionary parser keeps inflected verb forms as separate Oxford-style rows', () => {
+  assert.deepEqual(
+    parseDictionaryTranslation('形容词：明确的；动词过去式：决定；动词过去分词：决定；副词：坚决地'),
+    {
+      definitions: [
+        { partOfSpeech: 'adj.', meaning: '明确的' },
+        { partOfSpeech: 'v.（过去式）', meaning: '决定' },
+        { partOfSpeech: 'v.（过去分词）', meaning: '决定' },
+        { partOfSpeech: 'adv.', meaning: '坚决地' }
+      ]
+    }
+  );
+});
+
+test('dictionary parser recognizes combined past-tense labels as a peer definition', () => {
+  assert.deepEqual(
+    parseDictionaryTranslation('形容词：果断的 || clear and definite；动词过去式 / 过去分词：决定，解决 || past tense and past participle'),
+    {
+      definitions: [
+        { partOfSpeech: 'adj.', meaning: '果断的', englishMeaning: 'clear and definite' },
+        { partOfSpeech: 'v.（过去式/过去分词）', meaning: '决定，解决', englishMeaning: 'past tense and past participle' }
+      ]
+    }
+  );
+});
+
+test('dictionary parser preserves Oxford difficulty, pinyin, and examples', () => {
+  assert.deepEqual(
+    parseDictionaryTranslation('拼音：bent；难度：B1；动词：弯曲 || to make something not straight；例句：He bent the wire.'),
+    {
+      pinyin: 'bent',
+      difficulty: 'B1',
+      definitions: [{
+        partOfSpeech: 'v.',
+        meaning: '弯曲',
+        englishMeaning: 'to make something not straight'
+      }],
+      examples: ['He bent the wire.']
     }
   );
 });
@@ -63,6 +122,14 @@ test('selection purpose uses dictionary for one word and sentence translation ot
   assert.equal(classifySelectionPurpose('benched'), 'dictionary');
   assert.equal(classifySelectionPurpose('Sashi benched the player.'), 'sentence');
   assert.equal(classifySelectionPurpose(''), 'sentence');
+  assert.equal(classifySelectionPurpose('替补'), 'dictionary');
+});
+
+test('Chinese-only lookup does not offer reverse Chinese lookup for any stored audience', () => {
+  assert.equal(canTranslateSelection('bench', 'zh-CN'), true);
+  assert.equal(canTranslateSelection('替补', 'zh-CN'), false);
+  assert.equal(canTranslateSelection('替补', null), false);
+  assert.equal(canTranslateSelection('替补', 'en'), false);
 });
 
 test('dictionary-card appearance controls cycle themes and clamp font scale', () => {
@@ -82,13 +149,18 @@ test('dictionary translation parser keeps unlabelled provider text readable', ()
 
 test('regular past-form fallback derives a verb base form when the provider omits it', () => {
   assert.equal(
-    inferRegularPastBaseForm('benched', [{ partOfSpeech: '动词', meaning: '让……坐替补席' }]),
+    inferRegularPastBaseForm('benched', [{ partOfSpeech: 'v.', meaning: '让……坐替补席' }]),
     'bench'
   );
   assert.equal(
-    inferRegularPastBaseForm('stopped', [{ partOfSpeech: '动词', meaning: '停止' }]),
+    inferRegularPastBaseForm('stopped', [{ partOfSpeech: 'v.', meaning: '停止' }]),
     'stop'
   );
+});
+
+test('verb base form is shown only for an inflected selection', () => {
+  assert.equal(shouldShowBaseForm('announced', 'announce'), true);
+  assert.equal(shouldShowBaseForm('announce', 'announce'), false);
 });
 
 test('selection translation uses structured context so a single word reaches the provider', async () => {

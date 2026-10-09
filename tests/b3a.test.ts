@@ -373,17 +373,18 @@ test('settings loader uses shared defaults and content reads only non-secret set
   const content = await loadContentSettings({
     async get(keys) {
       requestedKeys = keys;
-      return { enabled: values.enabled, mode: values.mode, theme: 'system', fontScale: 1 };
+      return { enabled: values.enabled, mode: values.mode, nativeLanguage: 'en', interfaceLanguageSelected: false, audienceMode: 'learner', uiLanguage: keys.includes('uiLanguage') ? 'en' : 'zh-CN', theme: 'system', cardColor: 'rose', fontScale: 1, showOriginal: true, showPinyin: true, showDifficulty: false, showExamples: false };
     }
   });
 
   assert.deepEqual(full, {
     ...values,
     providerPreset: 'custom',
-    useJsonOutputMode: true
+    useJsonOutputMode: true,
+    translationStyle: 'natural'
   });
-  assert.deepEqual(content, { enabled: false, mode: 'B', theme: 'system', fontScale: 1 });
-  assert.deepEqual(requestedKeys, ['enabled', 'mode', 'theme', 'fontScale']);
+  assert.deepEqual(content, { enabled: false, mode: 'B', nativeLanguage: 'zh-CN', interfaceLanguageSelected: true, audienceMode: 'reader', uiLanguage: 'zh-CN', theme: 'system', cardColor: 'rose', fontScale: 1, showOriginal: false, showPinyin: false, showDifficulty: false, showExamples: false });
+  assert.deepEqual(requestedKeys, ['enabled', 'mode', 'nativeLanguage', 'interfaceLanguageSelected', 'audienceMode', 'uiLanguage', 'theme', 'cardColor', 'fontScale', 'showOriginal', 'showPinyin', 'showDifficulty', 'showExamples']);
   assert.equal(DEFAULT_SETTINGS.mode, 'A');
 });
 
@@ -469,7 +470,8 @@ test('settings default to DeepSeek JSON mode and normalize saved preset options'
     model: 'deepseek-chat',
     apiKey: '',
     providerPreset: 'deepseek',
-    useJsonOutputMode: true
+    useJsonOutputMode: true,
+    translationStyle: 'natural'
   });
   assert.deepEqual(defaults, DEFAULT_SETTINGS);
 

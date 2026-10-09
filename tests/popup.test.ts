@@ -61,6 +61,8 @@ test('popup exposes readiness and page controls without exposing the API key', a
   assert.deepEqual(state, {
     enabled: true,
     mode: 'A',
+    interfaceLanguageSelected: true,
+    uiLanguage: 'zh-CN',
     readiness: { kind: 'ready', origin: 'https://api.deepseek.com' }
   });
   assert.deepEqual(requestedOrigins, ['https://api.deepseek.com/*']);

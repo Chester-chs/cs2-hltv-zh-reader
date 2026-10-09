@@ -41,6 +41,7 @@ export function createBackgroundProviderFactory(
       apiKey: settings.apiKey,
       timeoutMs,
       useJsonOutputMode: settings.useJsonOutputMode,
+      translationStyle: settings.translationStyle,
       ...(options.temperature === undefined
         ? {}
         : { temperature: options.temperature }),

@@ -27,7 +27,17 @@ async function startContentScript(): Promise<void> {
     browser.storage.local as unknown as DictionaryStorage
   );
   let currentTheme = settings.theme;
+  let currentCardColor = settings.cardColor;
   let currentFontScale = settings.fontScale;
+  let currentLearning = {
+    nativeLanguage: settings.nativeLanguage,
+    audienceMode: settings.audienceMode,
+    uiLanguage: settings.uiLanguage,
+    showOriginal: settings.showOriginal,
+    showPinyin: settings.showPinyin,
+    showDifficulty: settings.showDifficulty,
+    showExamples: settings.showExamples
+  };
   const runtime = createContentRuntime({
     document,
     translator,
@@ -45,28 +55,45 @@ async function startContentScript(): Promise<void> {
     dictionaryStore,
     appearance: {
       theme: settings.theme,
+      cardColor: settings.cardColor,
       fontScale: settings.fontScale
     },
-    appearanceStore: browser.storage.local as unknown as DictionaryStorage
+    appearanceStore: browser.storage.local as unknown as DictionaryStorage,
+    learning: currentLearning
   });
 
   browser.storage.onChanged.addListener((changes, areaName) => {
     if (areaName !== 'local') {
       return;
     }
-    if (magnifier !== undefined && (Object.hasOwn(changes, 'theme') || Object.hasOwn(changes, 'fontScale'))) {
+    if (magnifier !== undefined && (Object.hasOwn(changes, 'theme') || Object.hasOwn(changes, 'cardColor') || Object.hasOwn(changes, 'fontScale'))) {
       const theme = changes.theme?.newValue;
       const fontScale = changes.fontScale?.newValue;
       if (theme === 'light' || theme === 'dark' || theme === 'system') {
         currentTheme = theme;
+      }
+      const nextCardColor = changes.cardColor?.newValue;
+      if (nextCardColor === 'neutral' || nextCardColor === 'blue' || nextCardColor === 'green' || nextCardColor === 'sand' || nextCardColor === 'rose') {
+        currentCardColor = nextCardColor;
       }
       if (typeof fontScale === 'number' && Number.isFinite(fontScale)) {
         currentFontScale = fontScale;
       }
       magnifier.setAppearance({
         theme: currentTheme,
+        cardColor: currentCardColor,
         fontScale: currentFontScale
       });
+    }
+    if (magnifier !== undefined && (Object.hasOwn(changes, 'nativeLanguage') || Object.hasOwn(changes, 'audienceMode') || Object.hasOwn(changes, 'uiLanguage') || Object.hasOwn(changes, 'showOriginal') || Object.hasOwn(changes, 'showPinyin') || Object.hasOwn(changes, 'showDifficulty') || Object.hasOwn(changes, 'showExamples'))) {
+      if (Object.hasOwn(changes, 'nativeLanguage')) currentLearning.nativeLanguage = 'zh-CN';
+      if (Object.hasOwn(changes, 'audienceMode')) currentLearning.audienceMode = 'reader';
+      currentLearning.uiLanguage = 'zh-CN';
+      if (typeof changes.showOriginal?.newValue === 'boolean') currentLearning.showOriginal = changes.showOriginal.newValue;
+      if (Object.hasOwn(changes, 'showPinyin')) currentLearning.showPinyin = false;
+      if (typeof changes.showDifficulty?.newValue === 'boolean') currentLearning.showDifficulty = changes.showDifficulty.newValue;
+      if (typeof changes.showExamples?.newValue === 'boolean') currentLearning.showExamples = changes.showExamples.newValue;
+      magnifier.setLearningOptions?.(currentLearning);
     }
     void applyContentSettingsChanges(runtime, changes).catch(() => {
       console.warn('[cs2-hltv-zh] content settings could not be applied');

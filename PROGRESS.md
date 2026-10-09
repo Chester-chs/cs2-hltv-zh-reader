@@ -570,3 +570,169 @@ Status: documentation update, rebuild, package refresh, and GitHub asset replace
 - Rebuilt and refreshed `C:\Users\Chester\Downloads\CS2-HLTV-Chinese-Reader-v1.0.0.zip`. The package now includes `README.md`, `README.zh-CN.md`, and a detailed `INSTALL.txt` in addition to the validated extension files. Size: 104,661 bytes. SHA-256: `1A3B6BA77C076A51C2E95324D1078BCB13865BC6E94CA3977797225615403C27`.
 - Package audit: manifest version `1.0.0`, `background.service_worker` is `background.js`, `background.scripts` is absent, required files are present, `node --check` passes for background/content bundles, and no bare import/export declarations remain. `npm test` passes **184/184**, `npm run typecheck`, `npm run build`, and `git diff --check` pass.
 - Replaced the `v1.0.0` GitHub release asset with the refreshed package. GitHub reports size 104,661 bytes and digest `sha256:1a3b6ba77c076a51c2e95324d1078bcb13865bc6e94ca3977797225615403c27` at `https://github.com/Chester-chs/cs2-hltv-zh-reader/releases/tag/v1.0.0`.
+
+## Audience modes and Oxford difficulty (2026-10-09)
+
+Status: implementation, regression coverage, build, and distribution checks are complete in the working tree. Browser reload and visual confirmation remain owner actions.
+
+- Added two audience modes in the toolbar popup: `中文阅读` defaults to full-Chinese display, while `中文学习` selects bilingual display and keeps English visible for learners.
+- Added popup interface-language switching between Chinese and English. The history page now follows the selected language and includes its own language selector.
+- Added learner-card controls for pinyin, Oxford/CEFR difficulty, and examples. Dictionary parsing accepts `难度：A1/A2/B1/B2/C1/C2`, `拼音：...`, and `例句：...`; the card displays a returned level without inventing one. Chinese selections are now classified as dictionary lookups for reverse lookup.
+- Added configurable natural/literal translation style to the provider settings and prompt. The dedicated history page now supports review cards (`记住了`/`稍后复习`) and CSV export for study tools; history entries retain difficulty and pinyin metadata.
+- Updated the README language pages with the audience modes, learning workflow, level labels, review, and export instructions.
+- Verification: `npm test` passes **185/185**, `npm run typecheck`, `npm run build`, and `git diff --check` pass. The generated background/content bundles remain single-file IIFEs; the manifest remains MV3 with `background.service_worker` only and `storage` as the required permission.
+- Refreshed `C:\Users\Chester\Downloads\CS2-HLTV-Chinese-Reader-v1.0.0.zip` after the audience-mode build. Final package size is 111,049 bytes with SHA-256 `6491A0C78CE568F6F84BE6FB5BE16C71E406D74996E30FD1E947D94E008408F2`; the GitHub `v1.0.0` asset was replaced and reports the same digest.
+
+## Native-language first-use routing (2026-10-09)
+
+Status: implementation and regression coverage are complete in the working tree; browser reload and owner testing remain pending.
+
+- Replaced the visible `中文阅读` / `中文学习` audience selector with a first-use native-language question in the toolbar popup. The choice is stored as `nativeLanguage` and can be changed later.
+- Chinese-native selection defaults to full-Chinese page translation, hides English-learning controls, and suppresses the selection magnifier for Chinese text so reverse Chinese lookup is not offered. English word lookup remains available.
+- English-native selection defaults to bilingual page display and exposes the full-Chinese/bilingual controls, pinyin, Oxford/CEFR level, examples, and Chinese pronunciation settings. English-native users can still select Chinese words for dictionary lookup.
+- Added popup and selection regression tests for first-use defaults and Chinese-native reverse-lookup suppression. Updated both README language pages with the new onboarding behavior.
+- Verification: `npm test` passes **189/189**, `npm run typecheck`, `npm run build`, and `git diff --check` pass. The generated MV3 bundles remain single-file IIFEs and the manifest remains storage-only with `background.service_worker`.
+- Test package: `C:\Users\Chester\Downloads\CS2-HLTV-Chinese-Reader-v1.0.0-native-language-test.zip` (115,326 bytes, SHA-256 `6B4662ABE0BE585060DF0A128355CC12D9711B9226E503488BB4166F052342BB`). This package is intentionally separate from the browser's existing unpacked folder so it can be loaded for owner testing.
+
+## Native-language-first bilingual settings pages (2026-10-09)
+
+Status: implementation and regression coverage are complete in the working tree; browser reload and owner testing remain pending.
+
+- Reordered the toolbar popup so the native-language choice is the first interactive control. Until it is chosen, readiness, page translation, mode controls, history, and provider setup remain hidden.
+- After choosing Chinese or English, the popup switches its labels automatically. Chinese users see full-Chinese translation and English lookup controls; English users see bilingual/full-Chinese mode controls and learner-card settings. The old visible audience labels are gone.
+- Added the same first-use gate to the options page. It switches the model/provider configuration page to Chinese or English before exposing mode, provider preset, model, API key, permission, and connection-test controls.
+- Verification after the page-order change: `npm test` passes **189/189**, `npm run typecheck`, `npm run build`, and `git diff --check` pass.
+
+## Two-step interface and native-language onboarding (2026-10-09)
+
+Status: implementation, regression coverage, build, and test package refresh are complete in the working tree; browser reload and owner testing remain pending.
+
+- Popup and options page now present a standalone interface-language step before native-language selection.
+- Native-language options are always bilingual: `中文 / Chinese` and `English / 英语`.
+- Provider, model, mode, API-key, permission, and connection-test controls remain hidden until both choices are stored.
+- The old popup bottom interface-language dropdown was removed.
+- Settings-page copy now follows the selected interface language independently from the selected native language.
+- Verification: `npm test` passes **191/191**, `npm run typecheck`, `npm run build`, `node --test tests/translate-dependencies.test.ts`, MV3 audit, bundle syntax checks, and `git diff --check` pass.
+- Test package: `C:\Users\Chester\Downloads\CS2-HLTV-Chinese-Reader-v1.0.0-native-language-test.zip` (116,384 bytes, SHA-256 `C9BC6476D82600597B61AF2EB41A29383E289936DE660506633F25F335D7DAA1`).
+
+## Chinese-reader-only workflow (2026-10-09)
+
+Status: implementation, regression coverage, rebuild, and package refresh are complete in the working tree; owner browser testing remains pending.
+
+- Removed the native-language question and all English-native onboarding from the popup and options page.
+- The first-use flow now asks only for interface language; after that, Chinese-reader controls appear immediately.
+- Chinese users keep full-Chinese/bilingual page modes, English word lookup, Chinese meanings, Oxford/CEFR levels, sentence translation, history, favorites, and card appearance controls.
+- Chinese reverse lookup remains disabled. Pinyin, Chinese-learning toggles, and English-native-only mode branches are no longer exposed; legacy stored values migrate to the Chinese-reader defaults.
+- `uiLanguage` is read from storage so the chosen interface language persists across popup and options-page reopenings.
+- Regression coverage now verifies Chinese-only defaults and rejects reverse Chinese lookup regardless of legacy stored audience.
+- Verification: `npm test` passes **188/188**, `npm run typecheck`, `npm run build`, `node --test tests/translate-dependencies.test.ts`, MV3 audit, bundle syntax checks, and `git diff --check` pass.
+- Test package: `C:\Users\Chester\Downloads\CS2-HLTV-Chinese-Reader-v1.0.0-native-language-test.zip` (113,903 bytes, SHA-256 `AD445118B56F794E4A922F76BC00B98379780F1161BA51733F71FF9C64F9599F`).
+
+## Oxford-style dictionary card corrections (2026-10-09)
+
+Status: implementation, regression coverage, rebuild, and package refresh are complete in the working tree; owner browser reload and visual confirmation remain pending.
+
+- Normalized dictionary parts of speech to Oxford-style abbreviations such as `v.`, `n.`, and `adj.` and removed the extra period that previously produced labels such as `动词.`.
+- The parser now consumes provider labels such as `词性`, `中文释义`, `concise English definition`, and `Oxford/CEFR 难度` without showing those field names in the card. Chinese meanings and concise English explanations remain separate rows.
+- Verb base forms are shown only when the selected word differs from the base form. Selecting `announce` no longer repeats `announce`; selecting `announced` can show `announce`.
+- The dictionary prompt now requires an Oxford/CEFR level (`A1`–`C2`) or an explicit `未知` value instead of silently omitting the field. Returned levels are displayed as `Oxford/CEFR 难度 B1` in the Chinese card.
+- The card follows the Oxford learner layout order: headword, UK/US pronunciation, optional inflection, CEFR level, concise part-of-speech definitions, English explanations, examples, and network meaning. Oxford's official entry places the headword, part of speech, UK/US IPA, CEFR markers, numbered meanings, and examples in this order; see the Oxford entry and CEFR guidance used for the layout review: https://www.oxfordlearnersdictionaries.com/definition/english/layout and https://www.oxfordlearnersdictionaries.com/about/wordlists/oxford3000-5000.
+- Verification: `npm test` passes **190/190**, `npm run typecheck`, `npm run build`, `node --test tests/translate-dependencies.test.ts`, MV3 manifest and bundle syntax audits, and `git diff --check` pass.
+- Refreshed package: `C:\Users\Chester\Downloads\CS2-HLTV-Chinese-Reader-v1.0.0-native-language-test.zip` (114,402 bytes, SHA-256 `95DDD9D4D1596B7BED84BBB05C72106E9FEFCB8F499F7D77B7F8297FB6344BBC`).
+
+## Dictionary card layout and appearance settings (2026-10-09)
+
+Status: implementation, regression coverage, rebuild, and package refresh are complete in the working tree; owner browser reload and visual confirmation remain pending.
+
+- Moved the verb base-form row to the bottom of the card so it no longer interrupts pronunciation and definitions.
+- Normalized additional Oxford-style forms, including `v.（过去式）`, `v.（过去分词）`, `v.（过去式/过去分词）`, `adj.`, `n.`, `adv.`, `prep.`, `pron.`, `conj.`, `phr.`, and `int.`. Inflected verb rows now remain separate peers instead of being merged into a generic supplement row.
+- Replaced the ambiguous half-sun header control with a `卡片设置` button. The panel now contains font-size controls, explicit `跟随系统`/`浅色`/`深色` choices, and five card-color presets (中性、蓝、绿、沙色、玫瑰). Card color persists in `browser.storage.local` and updates open cards immediately.
+- Moved the favorite star to the far right of the pronunciation row.
+- Updated the selection magnifier with a translucent gradient, stronger blur/saturation, and an inset highlight for an Apple-style frosted-glass appearance.
+- Verification: `npm test` passes **192/192**, `npm run typecheck`, `npm run build`, `node --test tests/translate-dependencies.test.ts`, MV3 manifest and bundle syntax audits, and `git diff --check` pass.
+- Refreshed package: `C:\Users\Chester\Downloads\CS2-HLTV-Chinese-Reader-v1.0.0-dictionary-card-layout.zip` (113,946 bytes, SHA-256 `8D417909040F3D0C3E7F7FCFECFEB34493EB823A372FF355D15781262239A2BE`).
+
+## Chinese-only interface migration (2026-10-09)
+
+Status: implementation, regression coverage, rebuild, and package refresh are complete in the working tree; browser reload and owner visual confirmation remain pending.
+
+- Removed the popup and options-page interface-language selector and all visible English UI copy. The popup now opens directly to Chinese page-translation controls, provider setup, dictionary history, and favorites.
+- Removed the history-page language selector. History, review, export, and empty-state messages remain Chinese-only.
+- Legacy storage values such as `uiLanguage: "en"`, `interfaceLanguageSelected: false`, English-native audience values, and pinyin/show-original flags are normalized at the content-settings boundary to the Chinese-reader defaults. Existing open HLTV tabs also force the Chinese learning copy after a storage update.
+- Updated the English and Chinese README pages and added `INSTALL.txt` so package instructions match the Chinese-only workflow.
+- Verification: `npm test` passes **191/191**, `npm run typecheck`, `npm run build`, `node --test tests/translate-dependencies.test.ts`, `node --check dist/background.js`, `node --check dist/content.js`, required-file/MV3 audits, Chinese-only HTML audit, and `git diff --check` pass. The manifest has `background.service_worker: "background.js"`, no `background.scripts`, and only the `storage` permission.
+- Refreshed package: `C:\Users\Chester\Downloads\CS2-HLTV-Chinese-Reader-v1.0.0-chinese-only-ui.zip` (112,069 bytes, SHA-256 `DB7A316FD1AA08A34891F77EC5C8AD9D9F6C5D991E5DC66870521A9545E2D06A`). Matching unpacked folder: `C:\Users\Chester\Downloads\CS2-HLTV-Chinese-Reader-v1.0.0-chinese-only-ui`.
+
+## Restore published popup in the active Chrome folder (2026-10-09)
+
+Status: popup restored and actual installed-folder files updated; Chrome reload and rendered-popup confirmation remain pending.
+
+- The owner still saw the English language selector because the previous update targeted a different folder. Read-only, extension-specific metadata from Chrome Default/Secure Preferences identifies installed extension `jnifmphnalmaheboipfbinbgikphelma` at `C:\Users\Chester\Downloads\CS2-HLTV-Chinese-Reader-v1.0.0-dictionary-card-layout`.
+- Restored `src/popup/popup.html`, `src/popup/main.ts`, and `src/popup/public/popup.css` exactly from the published `v1.0.0` Git tag. `git diff v1.0.0` for these three files is empty. This restores the Chinese title, readiness, translation toggle, display-mode controls, and history/provider buttons without a language selector. Other current features remain in the working tree.
+- Rebuilt and copied the complete distribution into the actual installed folder, the previously updated `v1.0.0` folder, and the Chinese-only package folder. All distribution file hashes match in each folder. Saved previous popup sources and installed popup assets under ignored `raw-capture/popup-before-release-restore-20261009/`.
+- Build, type checking, background/content/popup syntax checks, MV3 background declaration, required-file checks, and Chinese popup markup checks pass. No browser extension-management page was accessed; the owner must click Reload once to activate the replaced popup scripts. Installed rendering is **Unable to confirm**.
+- Refreshed `C:\Users\Chester\Downloads\CS2-HLTV-Chinese-Reader-v1.0.0-chinese-only-ui.zip`: 111,867 bytes, SHA-256 `F2EB8739D934C8C0430D44510356BC77E7767E325B78B09DFF6EBD8DD620FEC6`.
+- Real `git log -1 --oneline` remains `8bd53d6 docs: expand installation guide and package docs`; this stage is uncommitted and has not been pushed.
+
+## Color-choice label contrast correction (2026-10-09)
+
+Status: styling correction built and copied into the active Chrome extension folder; owner reload and rendered confirmation remain pending.
+
+- The color-choice buttons always use light pastel swatches but inherited the dark card's light foreground. This produced approximately 1.00–1.12:1 text contrast in the supplied screenshot's dark mode, including a nearly invisible neutral label.
+- Color-choice labels now use a fixed dark foreground (`#1d1d1f`), medium-bold weight, no text shadow, and a light color scheme independently of card theme. Their five swatch contrasts are 13.79–15.46:1. The existing blue selected border remains, and `aria-pressed` explicitly exposes which color is selected.
+- Type checking, build, background/content syntax, MV3 declaration, and all four required distribution-file checks pass. No pure-core code, permissions, or dependencies changed. All generated file hashes match the active `v1.0.0-dictionary-card-layout` folder and the two existing `v1.0.0`/Chinese-only folders. Browser rendering after reload is **Unable to confirm**.
+- Updated `C:\Users\Chester\Downloads\CS2-HLTV-Chinese-Reader-v1.0.0-chinese-only-ui.zip`: 111,907 bytes, SHA-256 `BB31CBD61B35E68BCB90D58B55D9A59CCD56320AE0FCB226C6CF03A5738929DD`.
+- Real latest commit remains `8bd53d6 docs: expand installation guide and package docs`; these changes are uncommitted.
+## Card-settings close button (2026-10-09)
+
+Status: implemented, built, and copied into the active Chrome extension folder; owner reload and rendered confirmation remain pending.
+
+- The settings panel now has an X button beside its title. It closes only the settings panel, keeps the dictionary card open, resets the gear's expanded state, and returns keyboard focus to the gear. It uses the existing themed icon control and scales with the card.
+- Type checking and build pass. Background/content syntax, MV3 declaration, and the four required distribution files were checked successfully. All generated file hashes match the active `v1.0.0-dictionary-card-layout` folder and the two existing `v1.0.0`/Chinese-only folders. Browser rendering after reload is **Unable to confirm**; the extension manager was not accessed.
+- Refreshed `C:\Users\Chester\Downloads\CS2-HLTV-Chinese-Reader-v1.0.0-chinese-only-ui.zip`: 111,963 bytes, SHA-256 `A1BD76B8C9091FB8CCC62508167C31B50D49FAA675AD281BDA12747B06028377`.
+- Real latest commit remains `8bd53d6 docs: expand installation guide and package docs`; these changes are uncommitted.
+
+## Keep dictionary card visible during a new search (2026-10-09)
+
+Status: implementation built and copied into the active Chrome extension folder; owner reload and rendered confirmation remain pending.
+
+- Root cause: `submitSearch` removed the popover before awaiting the provider, and the result renderer constructed another popover afterwards. A separate 12-second mount timer also removed cards regardless of pending work or reading activity.
+- Search now keeps the existing card connected, shows a themed Chinese loading message, and disables the previous entry's favorite action until the result arrives. Successful and failed responses update the same card element without resetting its position or user-resized dimensions. The automatic dismissal timer is removed; manual close and replacement disconnect the resize observer.
+- Per-document request versions ignore superseded responses. Closing a card during a lookup prevents that response from reopening it. Search and Enter use the same path; dictionary/sentence classification and provider error reporting remain intact.
+- Type checking, build, background/content syntax, MV3 background declaration, and all four required distribution-file checks pass. No dependencies, permissions, or pure-core files changed in this stage. Distribution hashes match all three existing installation/package folders. Live search behavior is **Unable to confirm**: extension-manager access remains prohibited, and owner reload is required.
+- Refreshed `C:\Users\Chester\Downloads\CS2-HLTV-Chinese-Reader-v1.0.0-chinese-only-ui.zip`: 112,226 bytes, SHA-256 `DD33037A1BAA42B0E5647CADEDDE4B687B4EA4164069FBB86368EBD585A07943`.
+- Real `git log -1 --oneline` remains `8bd53d6 docs: expand installation guide and package docs`; this stage is uncommitted and has not been pushed.
+
+## Consistent dictionary-header icon sizing (2026-10-09)
+
+Status: built and synchronized to the current installed folder; owner reload and visual confirmation remain pending.
+
+- The settings control previously used a small font glyph inside a 26px minimum-width / 30px-height button, while search and close used 32px controls with different SVG sizes. It now uses an outlined SVG gear instead of a platform-dependent text glyph.
+- Settings, search, and close share 32px square button dimensions, zero padding, border-box sizing, and disabled flex shrinking. Their centered SVGs are all 20px with 1.7 stroke width; all dimensions follow the existing card scale. The close glyph's bounds were adjusted for the new size.
+- Type checking, build, background/content syntax, MV3 declaration, and required distribution-file checks pass. All generated hashes match the active `v1.0.0-dictionary-card-layout` folder and both existing package folders. Rendered appearance after reload is **Unable to confirm**; no extension-management page was accessed.
+- Refreshed `C:\Users\Chester\Downloads\CS2-HLTV-Chinese-Reader-v1.0.0-chinese-only-ui.zip`: 112,393 bytes, SHA-256 `25A4ED0C1C7CBEC5C22429EA65848270253FCC9CD29F56CCEDF537055DD6CE68`.
+- Real latest commit remains `8bd53d6 docs: expand installation guide and package docs`; changes are uncommitted.
+
+## Current dictionary experience review (2026-10-09)
+
+Status: source review only; no implementation changes in this stage and no live browser verification.
+
+- Important: compact dictionary parsing splits every semicolon before assigning meanings to a part of speech. Additional synonyms or English definition clauses can be rendered as generic supplementary text rather than remaining with their definition.
+- Important: regular-past fallback simply strips `ed` except for limited special endings. When a provider omits the base form but returns a verb meaning, words such as `liked` and `moved` can be displayed and saved as `lik` and `mov`. Uncertain inferred bases should not be presented as verified dictionary information.
+- Important: dictionary history and favorites use unsynchronized read/modify/write of full storage arrays. Simultaneous writes in multiple tabs can overwrite records; favorite clicks are also not locked while saving.
+- The card's difficulty and IPA fields are provider-generated. Pronunciation uses system speech synthesis. There is no authoritative Oxford level dataset or Oxford recording integration in the reviewed implementation.
+- Query results reuse the card root but recreate its children and input; editing another query while a request is pending can lose those unsent edits or keyboard focus. System theme is checked when rendering, without a media-query change subscription; the appearance controller updates future card settings rather than the currently mounted card.
+- A separate review pass confirmed the base-form and storage concurrency issues. No tests or browser interaction were performed in this review. Rendered reproduction remains **Unable to confirm**. Real latest commit remains `8bd53d6 docs: expand installation guide and package docs`; remediation is pending.
+
+## v1.0.1 publication preparation (2026-10-09)
+
+This section records the release snapshot and checks before publication; it does not assert that a commit or remote release already exists. Verify publication against real Git and GitHub output.
+
+- Prepared the current Chinese-reader/card experience as version 1.0.1 in root `manifest.json` and `package.json`; no additional feature remediation was included.
+- Both separate README language pages retain their clickable language links. Added dated v1.0.1 changes, renamed installation headings to detailed installation steps, expanded Windows extraction/folder-selection instructions, and documented same-path updates to preserve extension identity. Added known issues and clarified that difficulty/IPA are model output and pronunciation is system speech rather than official Oxford data.
+- Updated `INSTALL.txt` and prepared release notes under ignored `raw-capture/release-v1.0.1.md`.
+- Type checking and build pass. The mandated pure-core dependency-direction check passes 1/1; background/content syntax, MV3 service-worker declaration, storage-only required permission, required dist files, and whitespace checks pass. The full suite was not rerun in this publication-preparation stage. Real-browser feature behavior remains **Unable to confirm**.
+- Prepared `C:\Users\Chester\Downloads\CS2-HLTV-Chinese-Reader-v1.0.1.zip`: 116,727 bytes, 22 ZIP entries, SHA-256 `58338FAA38F567386BD462677F2F6B78F48A45AA7A62A0144708C5C44CEC4408`. Manifest and install/docs assets exist directly at ZIP root; all built file hashes match the new extracted package folder. The currently loaded Chrome installation path was not changed.
+- At the preparation checkpoint, real latest commit was `8bd53d6 docs: expand installation guide and package docs`. The owner subsequently confirmed the exact 27-file commit and publication of v1.0.1. Build outputs, packages, raw captures, dependencies, and secrets are excluded from staging. Publication is identified by the resulting `main` commit and `v1.0.1` tag; verify their real remote hashes rather than treating the preparation hash as current.
+
+- The owner requested a public repository during publication. gh repo edit succeeded and a subsequent gh repo view returned visibility PUBLIC for Chester-chs/cs2-hltv-zh-reader. The single release commit and release upload were authorized by the owner; publication evidence is captured separately under ignored raw-capture after execution.
