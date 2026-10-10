@@ -146,6 +146,31 @@ function isEnglishMeaningLabel(label: string): boolean {
   return /^(?:英文释义|英语释义|english\s+definition|concise\s+english\s+definition|definition)$/iu.test(label.trim());
 }
 
+const DIFFICULTY_FIELD_PATTERN = /^(?:(?:难度|词汇难度|词汇等级|等级)|cefr(?:\s*(?:level|difficulty|参考等级))?|level|difficulty|oxford\s*(?:\/\s*cefr)?(?:\s*(?:level|difficulty|难度|等级))?|牛津(?:词典)?(?:\s*(?:难度|等级))?)\s*[:：]?\s*((?:A|B|C)[12]|初级|中级|高级|未知|unknown)$/iu;
+
+function splitDictionarySections(text: string): string[] {
+  const sections: string[] = [];
+  for (const fragment of text.split(/([;；\n]+)/u)) {
+    if (/^[;；\n]+$/u.test(fragment)) continue;
+    const part = fragment.trim();
+    if (part.length === 0) continue;
+    const label = part.match(/^([^:：]{1,64})\s*[:：]/u)?.[1]?.trim();
+    const startsSection = DIFFICULTY_FIELD_PATTERN.test(part) || (label !== undefined && (
+      normalizePartOfSpeech(label) !== undefined || isPartOfSpeechLabel(label) ||
+      isChineseMeaningLabel(label) || isEnglishMeaningLabel(label) ||
+      /^(?:动词原形|原形|词根|base(?:\s+form)?|lemma|英(?:式)?(?:音标|发音)?|美(?:式)?(?:音标|发音)?|拼音|pinyin|网络|例句|example|难度|词汇难度|词汇等级|等级|cefr(?:\s*(?:level|difficulty|参考等级))?|level|difficulty|oxford\s*(?:\/\s*cefr)?(?:\s*(?:level|difficulty|难度|等级))?|牛津(?:词典)?(?:\s*(?:难度|等级))?)$/iu.test(label)
+    ));
+    if (startsSection || sections.length === 0) {
+      sections.push(part);
+    } else {
+      // A separator inside a meaning or an English definition belongs to that
+      // field. Only recognized labels start another dictionary section.
+      sections[sections.length - 1] += `；${part}`;
+    }
+  }
+  return sections;
+}
+
 /**
  * Turns the provider's compact dictionary text into stable visual sections.
  * The provider is still allowed to return plain text; unrecognised text is
@@ -180,7 +205,7 @@ export function parseDictionaryTranslation(translated: string): DictionaryDispla
     pendingDefinition = undefined;
   };
 
-  for (const rawPart of translated.split(/[;；\n]+/u)) {
+  for (const rawPart of splitDictionarySections(translated)) {
     const part = rawPart.trim();
     if (part.length === 0) {
       continue;
@@ -204,7 +229,7 @@ export function parseDictionaryTranslation(translated: string): DictionaryDispla
       pinyin = pinyinPart[1]?.trim();
       continue;
     }
-    const difficultyPart = part.match(/^(?:(?:难度|词汇难度|词汇等级|等级)|cefr(?:\s*(?:level|difficulty))?|level|difficulty|oxford\s*(?:\/\s*cefr)?(?:\s*(?:level|difficulty|难度|等级))?|牛津(?:词典)?(?:\s*(?:难度|等级))?)\s*[:：]?\s*((?:A|B|C)[12]|初级|中级|高级|未知|unknown)$/iu);
+    const difficultyPart = part.match(DIFFICULTY_FIELD_PATTERN);
     if (difficultyPart !== null) {
       difficulty = difficultyPart[1]?.trim().toUpperCase();
       continue;
@@ -251,7 +276,7 @@ export function parseDictionaryTranslation(translated: string): DictionaryDispla
       const partOfSpeech = normalizePartOfSpeech(label);
       if (partOfSpeech !== undefined) {
         flushPendingDefinition();
-        const [meaning, englishMeaning] = value.split(/\s+\|\|\s+/u, 2);
+        const [meaning, englishMeaning] = value.split(/\s*\|\|\s*/u, 2);
         definitions.push({
           partOfSpeech,
           meaning: meaning ?? '',
@@ -293,29 +318,10 @@ export function parseDictionaryTranslation(translated: string): DictionaryDispla
   };
 }
 
-export function inferRegularPastBaseForm(original: string, definitions: readonly DictionaryDefinition[]): string | undefined {
-  if (!definitions.some((definition) => definition.partOfSpeech === 'v.' || definition.partOfSpeech === '动词')) {
-    return undefined;
-  }
-  const word = original.trim();
-  if (!/^[A-Za-z]+$/u.test(word) || word.length < 4) {
-    return undefined;
-  }
-  const lower = word.toLowerCase();
-  if (lower.endsWith('ied') && word.length > 4) {
-    return `${word.slice(0, -3)}y`;
-  }
-  if (!lower.endsWith('ed')) {
-    return undefined;
-  }
-  let stem = word.slice(0, -2);
-  if (/([b-df-hj-np-tv-z])\1$/iu.test(stem)) {
-    stem = stem.slice(0, -1);
-  }
-  if (stem.toLowerCase().endsWith('us') || stem.toLowerCase().endsWith('aus')) {
-    return `${stem}e`;
-  }
-  return stem;
+export function inferRegularPastBaseForm(_original: string, _definitions: readonly DictionaryDefinition[]): string | undefined {
+  // Spelling alone cannot distinguish liked/lik, hoped/hop, or irregular
+  // forms. Omit an unknown lemma rather than displaying a fabricated word.
+  return undefined;
 }
 
 export function shouldShowBaseForm(original: string, baseForm: string): boolean {
@@ -443,16 +449,70 @@ function appendStarIcon(document: Document, parent: Element, filled: boolean): v
   parent.appendChild(icon);
 }
 
-function speakWord(document: Document, word: string, language: 'en-GB' | 'en-US' | 'zh-CN'): void {
+const selectionSpeech = new WeakMap<Document, () => void>();
+
+function stopSelectionSpeech(document: Document): void {
+  selectionSpeech.get(document)?.();
+  selectionSpeech.delete(document);
+}
+
+function speakWord(
+  document: Document,
+  word: string,
+  language: 'en-GB' | 'en-US' | 'zh-CN',
+  onNotice: (message: string) => void
+): void {
   const view = document.defaultView;
   if (view === null || typeof view.speechSynthesis?.speak !== 'function' || typeof view.SpeechSynthesisUtterance !== 'function') {
+    onNotice('当前浏览器无法使用系统发音，请通过牛津官方词典核对入口听录音。');
     return;
   }
-  view.speechSynthesis.cancel();
-  const utterance = new view.SpeechSynthesisUtterance(word);
-  utterance.lang = language;
-  utterance.rate = 0.86;
-  view.speechSynthesis.speak(utterance);
+  stopSelectionSpeech(document);
+  try {
+    const utterance = new view.SpeechSynthesisUtterance(word);
+    const voices = view.speechSynthesis.getVoices();
+    const exactVoice = voices.find((voice) => voice.lang.replace(/_/gu, '-').toLowerCase() === language.toLowerCase());
+    const fallbackVoice = voices.find((voice) => voice.lang.toLowerCase().startsWith(language.slice(0, 2)));
+    const voice = exactVoice ?? fallbackVoice;
+    if (voices.length > 0 && voice === undefined) {
+      onNotice('系统没有可用的对应语言语音，请安装英语语音或通过牛津官网听录音。');
+      return;
+    }
+    if (voice !== undefined) utterance.voice = voice;
+    utterance.lang = voice?.lang ?? language;
+    utterance.rate = 0.86;
+    let active = true;
+    const stop = (): void => {
+      if (!active) return;
+      active = false;
+      utterance.onend = null;
+      utterance.onerror = null;
+      view.speechSynthesis.cancel();
+    };
+    selectionSpeech.set(document, stop);
+    const finish = (): void => {
+      active = false;
+      if (selectionSpeech.get(document) === stop) selectionSpeech.delete(document);
+    };
+    utterance.onend = finish;
+    utterance.onerror = (event) => {
+      finish();
+      if (event.error !== 'canceled' && event.error !== 'interrupted') {
+        onNotice('系统发音失败，请检查系统语音设置，或通过牛津官网听录音。');
+      }
+    };
+    view.speechSynthesis.speak(utterance);
+    if (voices.length === 0) {
+      onNotice('系统语音尚在初始化，将尝试默认语音；若无声音请稍后再点击。');
+    } else if (exactVoice === undefined) {
+      onNotice(language === 'zh-CN' ? '正在使用其他中文系统语音。' : `未安装${language === 'en-GB' ? '英式' : '美式'}语音，正在使用其他英语系统语音。`);
+    } else {
+      onNotice(`正在播放「${word}」的系统发音。`);
+    }
+  } catch {
+    stopSelectionSpeech(document);
+    onNotice('系统发音未能启动，请重试或通过牛津官网听录音。');
+  }
 }
 
 function appendSpeakerButton(
@@ -460,11 +520,14 @@ function appendSpeakerButton(
   parent: Element,
   word: string,
   language: 'en-GB' | 'en-US' | 'zh-CN',
-  label: string
+  label: string,
+  onNotice: (message: string) => void
 ): void {
   const button = document.createElement('button');
   button.type = 'button';
-  button.setAttribute('aria-label', `${label}发音`);
+  const voiceLabel = language === 'zh-CN' ? '中文系统语音' : `${label}式系统语音`;
+  button.setAttribute('aria-label', voiceLabel);
+  button.title = `${voiceLabel}（非牛津录音）`;
   setStyles(button, {
     border: '0',
     padding: '0',
@@ -475,8 +538,39 @@ function appendSpeakerButton(
     alignItems: 'center'
   });
   appendSpeakerIcon(document, button);
-  button.addEventListener('click', () => speakWord(document, word, language));
+  button.addEventListener('click', () => speakWord(document, word, language, onNotice));
   parent.appendChild(button);
+}
+
+function createOxfordVerificationLinks(document: Document, word: string, includeSourceNote: boolean): HTMLElement {
+  const section = document.createElement('div');
+  setStyles(section, {
+    color: 'var(--hltv-zh-card-muted)',
+    fontSize: 'calc(12px * var(--hltv-zh-scale))',
+    marginTop: 'calc(14px * var(--hltv-zh-scale))',
+    lineHeight: '1.5'
+  });
+  if (includeSourceNote) {
+    const description = document.createElement('div');
+    description.textContent = '释义、音标与等级由模型提供；发音使用系统语音。';
+    section.appendChild(description);
+  }
+  const links = document.createElement('div');
+  setStyles(links, { display: 'flex', flexWrap: 'wrap', gap: 'calc(12px * var(--hltv-zh-scale))' });
+  for (const [label, url] of [
+    ['牛津官方词典核对 ↗', `https://www.oxfordlearnersdictionaries.com/search/english/direct/?q=${encodeURIComponent(word.trim().toLowerCase())}`],
+    ['牛津官方等级词表 ↗', 'https://www.oxfordlearnersdictionaries.com/wordlists/oxford3000-5000']
+  ] as const) {
+    const link = document.createElement('a');
+    link.textContent = label;
+    link.href = url;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    setStyles(link, { color: 'var(--hltv-zh-card-text)', textDecoration: 'underline', textUnderlineOffset: '3px' });
+    links.appendChild(link);
+  }
+  section.appendChild(links);
+  return section;
 }
 
 function installIconButtonHover(button: HTMLElement): void {
@@ -548,10 +642,26 @@ function installSelectionCardScaling(
 
 const selectionCardObservers = new WeakMap<HTMLElement, ResizeObserver>();
 const selectionLookupVersions = new WeakMap<Document, number>();
+const activeSelectionCards = new WeakMap<Document, HTMLElement>();
+const appearanceWrites = new WeakMap<Document, {
+  queue: Promise<void>;
+  nextRevision: number;
+  pending: Partial<Record<keyof SelectionCardAppearance, number>>;
+}>();
+const selectionCardBindings = new WeakMap<HTMLElement, {
+  input: HTMLInputElement;
+  refreshAppearance(): void;
+  dispose(): void;
+}>();
 
 function removeSelectionPopover(popover: HTMLElement): void {
+  selectionCardBindings.get(popover)?.dispose();
+  selectionCardBindings.delete(popover);
   selectionCardObservers.get(popover)?.disconnect();
   selectionCardObservers.delete(popover);
+  if (activeSelectionCards.get(popover.ownerDocument) === popover) {
+    activeSelectionCards.delete(popover.ownerDocument);
+  }
   popover.remove();
 }
 
@@ -617,6 +727,14 @@ function showSelectionTranslation(
     removeSelectionPopover(previousCard);
   }
   const popover = reuseCard ? existingPopover : document.createElement('aside');
+  const previousBindings = selectionCardBindings.get(popover);
+  const previousInput = previousBindings?.input;
+  const editedDraft = previousInput !== undefined && previousInput.value !== original
+    ? previousInput.value : undefined;
+  const restoreInputFocus = previousInput !== undefined && document.activeElement === previousInput;
+  const caretStart = previousInput?.selectionStart ?? null;
+  const caretEnd = previousInput?.selectionEnd ?? null;
+  previousBindings?.dispose();
   popover.replaceChildren();
   popover.setAttribute('aria-busy', 'false');
   const englishUi = false;
@@ -626,10 +744,11 @@ function showSelectionTranslation(
   if (!reuseCard) {
     popover.style.setProperty('--hltv-zh-scale', '1');
   }
+  const colorScheme = document.defaultView?.matchMedia?.('(prefers-color-scheme: dark)');
   const applyCardTheme = (theme: ThemeMode, cardColor: CardColor): void => {
     const dark = theme === 'dark' || (
       theme === 'system' &&
-      document.defaultView?.matchMedia?.('(prefers-color-scheme: dark)').matches === true
+      colorScheme?.matches === true
     );
     popover.style.setProperty('--hltv-zh-card-text', dark ? '#f5f5f7' : '#1d1d1f');
     popover.style.setProperty('--hltv-zh-card-muted', dark ? '#a1a1a6' : '#6e6e73');
@@ -678,7 +797,7 @@ function showSelectionTranslation(
   });
   const title = document.createElement('input');
   title.type = 'text';
-  title.value = original;
+  title.value = editedDraft ?? original;
   title.setAttribute('aria-label', '编辑要查询的单词或短语');
   setStyles(title, {
     minWidth: '0',
@@ -819,13 +938,19 @@ function showSelectionTranslation(
     });
     return button;
   };
-  const persistAppearance = (): void => {
+  const persistAppearance = (field: keyof SelectionCardAppearance): void => {
     if (appearanceStore !== undefined) {
-      void appearanceStore.set({
-        theme: appearance.theme,
-        cardColor: appearance.cardColor,
-        fontScale: clampFontScale(appearance.fontScale)
-      }).catch(() => {});
+      const values = { [field]: field === 'fontScale' ? clampFontScale(appearance.fontScale) : appearance[field] };
+      const writes = appearanceWrites.get(document) ?? { queue: Promise.resolve(), nextRevision: 0, pending: {} };
+      const revision = ++writes.nextRevision;
+      writes.pending[field] = revision;
+      writes.queue = writes.queue
+        .then(() => appearanceStore.set(values))
+        .catch(() => showCardNotice('外观设置未保存，当前卡片仍保留预览；请重新选择后重试。'))
+        .finally(() => {
+          if (writes.pending[field] === revision) delete writes.pending[field];
+        });
+      appearanceWrites.set(document, writes);
     }
   };
   const themeChoices = [
@@ -839,7 +964,7 @@ function showSelectionTranslation(
       appearance.theme = value;
       applyCardTheme(appearance.theme, appearance.cardColor);
       updateThemeChoices();
-      persistAppearance();
+      persistAppearance('theme');
     });
     return button;
   });
@@ -848,6 +973,7 @@ function showSelectionTranslation(
       const value = themeChoices[index]?.[0];
       button.style.backgroundColor = value === appearance.theme ? 'rgba(0, 122, 255, 0.14)' : 'transparent';
       button.style.borderColor = value === appearance.theme ? '#007aff' : 'rgba(60, 60, 67, 0.18)';
+      button.setAttribute('aria-pressed', String(value === appearance.theme));
     });
   };
   const colorChoices: readonly [CardColor, string][] = [
@@ -866,7 +992,7 @@ function showSelectionTranslation(
       appearance.cardColor = value;
       applyCardTheme(appearance.theme, appearance.cardColor);
       updateColorChoices();
-      persistAppearance();
+      persistAppearance('cardColor');
     });
     return button;
   });
@@ -890,7 +1016,7 @@ function showSelectionTranslation(
   const updateFontScale = (delta: number): void => {
     appearance.fontScale = clampFontScale(appearance.fontScale + delta);
     updatePopoverScale(popover, appearance.fontScale);
-    persistAppearance();
+    persistAppearance('fontScale');
   };
   fontDown.addEventListener('click', () => updateFontScale(-0.05));
   fontUp.addEventListener('click', () => updateFontScale(0.05));
@@ -900,6 +1026,51 @@ function showSelectionTranslation(
   });
   updateThemeChoices();
   updateColorChoices();
+  const refreshAppearance = (): void => {
+    applyCardTheme(appearance.theme, appearance.cardColor);
+    updateThemeChoices();
+    updateColorChoices();
+    updatePopoverScale(popover, appearance.fontScale);
+  };
+  const onSystemAppearanceChange = (): void => {
+    if (appearance.theme === 'system') refreshAppearance();
+  };
+  colorScheme?.addEventListener('change', onSystemAppearanceChange);
+  selectionCardBindings.set(popover, {
+    input: title,
+    refreshAppearance,
+    dispose: () => {
+      colorScheme?.removeEventListener('change', onSystemAppearanceChange);
+      stopSelectionSpeech(document);
+    }
+  });
+  activeSelectionCards.set(document, popover);
+  let cardNotice: HTMLElement | undefined;
+  const showCardNotice = (message: string): void => {
+    if (!header.isConnected) return;
+    if (cardNotice === undefined) {
+      cardNotice = document.createElement('div');
+      cardNotice.setAttribute('role', 'status');
+      setStyles(cardNotice, {
+        color: 'var(--hltv-zh-card-muted)',
+        fontSize: 'calc(13px * var(--hltv-zh-scale))',
+        marginTop: 'calc(8px * var(--hltv-zh-scale))',
+        wordBreak: 'break-word'
+      });
+      popover.appendChild(cardNotice);
+    }
+    cardNotice.textContent = message;
+  };
+  const mountCard = (): void => {
+    mountSelectionPopover(body, popover, appearance);
+    if (editedDraft !== undefined) {
+      showCardNotice(`下方结果来自「${original}」；当前输入尚未查询。`);
+    }
+    if (restoreInputFocus) {
+      title.focus({ preventScroll: true });
+      if (caretStart !== null && caretEnd !== null) title.setSelectionRange(caretStart, caretEnd);
+    }
+  };
   let favoriteButton: HTMLButtonElement | undefined;
   if (purpose === 'dictionary' && dictionaryStore !== undefined) {
     favoriteButton = document.createElement('button');
@@ -927,8 +1098,14 @@ function showSelectionTranslation(
         appendStarIcon(document, favoriteButton, isFavorite);
       }
     };
-    void dictionaryStore.isFavorite(original).then(updateFavorite).catch(() => {});
+    let favoriteRevision = 0;
+    void dictionaryStore.isFavorite(original).then((value) => {
+      if (favoriteRevision === 0) updateFavorite(value);
+    }).catch(() => showCardNotice('收藏状态读取失败，请重试。'));
     favoriteButton.addEventListener('click', () => {
+      if (favoriteButton === undefined || favoriteButton.disabled) return;
+      favoriteButton.disabled = true;
+      favoriteRevision += 1;
       const data = parseDictionaryTranslation(translated);
       const parsedBaseForm = data.baseForm ?? inferRegularPastBaseForm(original, data.definitions);
       const baseForm = parsedBaseForm !== undefined && shouldShowBaseForm(original, parsedBaseForm)
@@ -944,7 +1121,14 @@ function showSelectionTranslation(
         ...(data.examples === undefined ? {} : { examples: data.examples }),
         savedAt: Date.now()
       };
-      void dictionaryStore.toggleFavorite(entry).then(updateFavorite).catch(() => {});
+      void dictionaryStore.toggleFavorite(entry).then((value) => {
+        updateFavorite(value);
+        showCardNotice(value ? '已收藏。' : '已取消收藏。');
+      }).catch(() => showCardNotice('收藏保存失败，请重试。')).finally(() => {
+        if (favoriteButton !== undefined) {
+          favoriteButton.disabled = popover.getAttribute('aria-busy') === 'true';
+        }
+      });
     });
   }
   const close = document.createElement('button');
@@ -1012,6 +1196,11 @@ function showSelectionTranslation(
       submitSearch();
     }
   });
+  title.addEventListener('input', () => {
+    if (popover.getAttribute('aria-busy') !== 'true') {
+      showCardNotice(title.value === original ? '' : `下方结果来自「${original}」；点击搜索或按 Enter 查询当前输入。`);
+    }
+  });
   controls.append(settingsButton, search, close);
   header.append(title, controls);
   popover.appendChild(settingsPanel);
@@ -1036,10 +1225,13 @@ function showSelectionTranslation(
       whiteSpace: 'pre-wrap'
     });
     popover.append(header, divider, result);
+    if (purpose === 'dictionary') {
+      popover.appendChild(createOxfordVerificationLinks(document, original, false));
+    }
     if (!reuseCard) {
       positionResultPopover(popover, anchorRect, document);
     }
-    mountSelectionPopover(body, popover, appearance);
+    mountCard();
     return;
   }
 
@@ -1067,7 +1259,7 @@ function showSelectionTranslation(
     } else {
       popover.append(header, divider, result);
     }
-    mountSelectionPopover(body, popover, appearance);
+    mountCard();
     return;
   }
 
@@ -1124,7 +1316,7 @@ function showSelectionTranslation(
         : `${label} /${value}/`;
       const speaker = document.createElement('span');
       setStyles(speaker, { color: 'var(--hltv-zh-card-control)', display: 'inline-flex' });
-      appendSpeakerButton(document, speaker, original, label === '英' ? 'en-GB' : 'en-US', label);
+      appendSpeakerButton(document, speaker, original, label === '英' ? 'en-GB' : 'en-US', label, showCardNotice);
       item.append(labelNode, speaker);
       pronunciation.appendChild(item);
     }
@@ -1146,13 +1338,13 @@ function showSelectionTranslation(
     });
     const speaker = document.createElement('span');
     setStyles(speaker, { display: 'inline-flex', marginLeft: 'calc(6px * var(--hltv-zh-scale))' });
-    appendSpeakerButton(document, speaker, original, 'zh-CN', englishUi ? 'Chinese' : '中文');
+    appendSpeakerButton(document, speaker, original, 'zh-CN', englishUi ? 'Chinese' : '中文', showCardNotice);
     pinyin.appendChild(speaker);
     popover.appendChild(pinyin);
   }
   if (learning.showDifficulty !== false && data.difficulty !== undefined) {
     const level = document.createElement('div');
-    level.textContent = `${englishUi ? 'Oxford / CEFR level' : 'Oxford/CEFR 难度'}  ${data.difficulty}`;
+    level.textContent = `CEFR 参考等级（模型）  ${data.difficulty}`;
     setStyles(level, {
       color: 'var(--hltv-zh-card-muted)',
       marginBottom: 'calc(8px * var(--hltv-zh-scale))'
@@ -1213,13 +1405,14 @@ function showSelectionTranslation(
     });
     popover.appendChild(network);
   }
+  popover.appendChild(createOxfordVerificationLinks(document, original, true));
   if (baseNode !== undefined) {
     popover.appendChild(baseNode);
   }
   if (!reuseCard) {
     positionResultPopover(popover, anchorRect, document);
   }
-  mountSelectionPopover(body, popover, appearance);
+  mountCard();
   if (dictionaryStore !== undefined) {
     const dataEntry: DictionaryEntry = {
       query: original,
@@ -1231,7 +1424,7 @@ function showSelectionTranslation(
       ...(data.examples === undefined ? {} : { examples: data.examples }),
       savedAt: Date.now()
     };
-    void dictionaryStore.recordHistory(dataEntry).catch(() => {});
+    void dictionaryStore.recordHistory(dataEntry).catch(() => showCardNotice('本次查询未能保存到历史，请重试。'));
   }
 }
 
@@ -1452,11 +1645,14 @@ export function installSelectionMagnifier(options: {
   }, true);
   return {
     setAppearance(next) {
-      appearance = {
-        theme: next.theme,
-        cardColor: next.cardColor,
-        fontScale: Math.max(0.8, Math.min(1.25, next.fontScale))
-      };
+      const pending = appearanceWrites.get(document)?.pending;
+      // An earlier own-write notification must not replace a newer local click
+      // waiting in the queue. Other fields remain free to sync across tabs.
+      if (pending?.theme === undefined) appearance.theme = next.theme;
+      if (pending?.cardColor === undefined) appearance.cardColor = next.cardColor;
+      if (pending?.fontScale === undefined) appearance.fontScale = clampFontScale(next.fontScale);
+      const card = activeSelectionCards.get(document);
+      if (card !== undefined) selectionCardBindings.get(card)?.refreshAppearance();
     },
     setLearningOptions(next) {
       learning = { ...next };

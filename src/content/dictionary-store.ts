@@ -16,6 +16,7 @@ export interface DictionaryEntry {
 
 export const DICTIONARY_HISTORY_KEY = 'dictionaryHistory';
 export const DICTIONARY_FAVORITES_KEY = 'dictionaryFavorites';
+export const DICTIONARY_REVIEW_KEY = 'dictionaryReviewState';
 const MAX_HISTORY_ENTRIES = 50;
 const MAX_FAVORITES = 100;
 
@@ -23,7 +24,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-function parseEntry(value: unknown): DictionaryEntry | undefined {
+export function parseDictionaryEntry(value: unknown): DictionaryEntry | undefined {
   if (!isRecord(value) || typeof value.query !== 'string' || typeof value.translated !== 'string') {
     return undefined;
   }
@@ -49,7 +50,7 @@ function readEntries(values: Record<string, unknown>, key: string): DictionaryEn
     return [];
   }
   return stored.flatMap((item) => {
-    const parsed = parseEntry(item);
+    const parsed = parseDictionaryEntry(item);
     return parsed === undefined ? [] : [parsed];
   });
 }
@@ -69,13 +70,11 @@ export function createDictionaryStore(
   listFavorites(): Promise<DictionaryEntry[]>;
   clearHistory(): Promise<void>;
   clearFavorites(): Promise<void>;
+  recordReview(query: string, remembered: boolean): Promise<void>;
 } {
   async function read(key: string): Promise<DictionaryEntry[]> {
-    try {
-      return readEntries(await storage.get([key]), key);
-    } catch {
-      return [];
-    }
+    // A failed read must not turn a subsequent write into a destructive reset.
+    return readEntries(await storage.get([key]), key);
   }
 
   async function write(key: string, entries: DictionaryEntry[]): Promise<void> {
@@ -123,6 +122,25 @@ export function createDictionaryStore(
     await write(DICTIONARY_FAVORITES_KEY, []);
   }
 
+  async function recordReview(query: string, remembered: boolean): Promise<void> {
+    const values = await storage.get([DICTIONARY_REVIEW_KEY]);
+    const stored = values[DICTIONARY_REVIEW_KEY];
+    const state: Record<string, { dueAt: number; interval: number }> = Object.create(null);
+    if (isRecord(stored)) {
+      for (const [key, value] of Object.entries(stored)) {
+        if (isRecord(value) && typeof value.dueAt === 'number' && Number.isFinite(value.dueAt) &&
+            typeof value.interval === 'number' && Number.isFinite(value.interval) && value.interval >= 0 && value.interval <= 30) {
+          state[key.trim().toLowerCase()] = { dueAt: value.dueAt, interval: value.interval };
+        }
+      }
+    }
+    const key = query.trim().toLowerCase();
+    const previous = state[key];
+    const interval = remembered ? Math.min(30, Math.max(1, (previous?.interval ?? 0) * 2)) : 1;
+    state[key] = { interval, dueAt: now() + interval * 24 * 60 * 60 * 1000 };
+    await storage.set({ [DICTIONARY_REVIEW_KEY]: state });
+  }
+
   return {
     recordHistory,
     listHistory,
@@ -130,6 +148,7 @@ export function createDictionaryStore(
     isFavorite,
     listFavorites,
     clearHistory,
-    clearFavorites
+    clearFavorites,
+    recordReview
   };
 }

@@ -8,7 +8,8 @@ import { applyContentSettingsChanges } from './content/settings-sync.ts';
 import type { TranslateRequest } from './background/protocol.ts';
 import type { ContentSettingsStorage } from './content/settings.ts';
 import { installSelectionMagnifier } from './content/selection-translation.ts';
-import { createDictionaryStore, type DictionaryStorage } from './content/dictionary-store.ts';
+import type { DictionaryStorage } from './content/dictionary-store.ts';
+import { createDictionaryClient } from './content/dictionary-client.ts';
 
 browser.runtime.getManifest();
 
@@ -23,9 +24,7 @@ async function startContentScript(): Promise<void> {
       return browser.runtime.sendMessage(message) as Promise<unknown>;
     }
   });
-  const dictionaryStore = createDictionaryStore(
-    browser.storage.local as unknown as DictionaryStorage
-  );
+  const dictionaryStore = createDictionaryClient((message) => browser.runtime.sendMessage(message));
   let currentTheme = settings.theme;
   let currentCardColor = settings.cardColor;
   let currentFontScale = settings.fontScale;

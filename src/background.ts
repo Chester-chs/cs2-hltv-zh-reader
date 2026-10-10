@@ -1,14 +1,18 @@
 import browser from 'webextension-polyfill';
+import type { Runtime } from 'webextension-polyfill';
 import { createIndexedDbCacheStore } from './background/cache-store.ts';
 import { loadPackagedGlossary } from './background/glossary-loader.ts';
 import {
-  createBackgroundMessageHandler,
-  installBackgroundMessageHandler
+  createBackgroundMessageHandler
 } from './background/translation-handler.ts';
 import { createCoreBackgroundTranslationRunner } from './background/translation-engine.ts';
 import type { ExtensionSettingsStorage } from './background/settings.ts';
 import { createProviderPermissionMonitor } from './background/provider-permissions.ts';
 import { createBackgroundProviderFactory } from './background/provider.ts';
+import { createDictionaryMessageHandler } from './background/dictionary-handler.ts';
+import { DICTIONARY_MESSAGE_TYPE } from './shared/dictionary-messages.ts';
+import { TRANSLATE_REQUEST_TYPE } from './background/protocol.ts';
+import type { DictionaryStorage } from './content/dictionary-store.ts';
 
 const { version } = browser.runtime.getManifest();
 
@@ -59,7 +63,11 @@ const messageHandler = createBackgroundMessageHandler({
   hasProviderPermission: providerPermissionMonitor.hasProviderPermission
 });
 
-installBackgroundMessageHandler(
-  browser.runtime.onMessage,
-  messageHandler
-);
+const dictionaryHandler = createDictionaryMessageHandler(browser.storage.local as unknown as DictionaryStorage);
+browser.runtime.onMessage.addListener((message: unknown, sender: Runtime.MessageSender) => {
+  if (sender.id !== browser.runtime.id || typeof message !== 'object' || message === null) return undefined;
+  const type = (message as Record<string, unknown>).type;
+  if (type === DICTIONARY_MESSAGE_TYPE) return dictionaryHandler(message);
+  if (type === TRANSLATE_REQUEST_TYPE) return messageHandler(message);
+  return undefined;
+});

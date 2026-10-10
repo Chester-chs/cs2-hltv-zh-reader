@@ -225,7 +225,11 @@ authorizeButton.addEventListener('click', async () => {
   authorizeButton.disabled = false;
   if (result.state === 'granted') {
     statusLine.textContent = isEnglishUi() ? `Authorized ${result.origin}.` : `已授权 ${result.origin}。`;
-    await storage.set({ permissionRevision: Date.now() });
+    try {
+      await storage.set({ permissionRevision: Date.now() });
+    } catch {
+      statusLine.textContent = '域名已授权，但权限状态标记保存失败，请重试。';
+    }
   } else if (result.state === 'denied' && result.origin !== undefined) {
     statusLine.textContent = missingPermissionText(result.origin);
   } else {
@@ -240,11 +244,13 @@ document.querySelector<HTMLFormElement>('#settings-form')!.addEventListener(
     event.preventDefault();
     saveButton.disabled = true;
     const draft = readDraft();
-    let latest = draft;
+    let latest: ExtensionSettings;
     try {
       latest = await loadSettings(storage);
     } catch {
-      // The draft remains the safest fallback if storage is temporarily unavailable.
+      saveButton.disabled = false;
+      statusLine.textContent = '无法读取最新设置，本次未保存；请重试，避免覆盖另一页面的修改。';
+      return;
     }
     const result = await saveOptionsSettings({
       ...draft,
@@ -257,7 +263,11 @@ document.querySelector<HTMLFormElement>('#settings-form')!.addEventListener(
       statusLine.textContent = isEnglishUi() ? 'Settings saved.' : '设置已保存。';
       enabledDirty = false;
       modeDirty = false;
-      await storage.set({ permissionRevision: Date.now() });
+      try {
+        await storage.set({ permissionRevision: Date.now() });
+      } catch {
+        statusLine.textContent = '设置已保存，但权限状态标记保存失败；请刷新 HLTV 后检查连接。';
+      }
       if (fallbackEnabledInput.checked && fallbackBaseURLInput.value.trim().length > 0) {
         const fallbackPermission = await authorizeProviderOrigin(fallbackBaseURLInput.value, permissions);
         if (fallbackPermission.state !== 'granted') {

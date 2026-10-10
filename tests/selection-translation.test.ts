@@ -147,14 +147,14 @@ test('dictionary translation parser keeps unlabelled provider text readable', ()
   });
 });
 
-test('regular past-form fallback derives a verb base form when the provider omits it', () => {
+test('regular past-form fallback omits unverified base forms when the provider omits them', () => {
   assert.equal(
     inferRegularPastBaseForm('benched', [{ partOfSpeech: 'v.', meaning: '让……坐替补席' }]),
-    'bench'
+    undefined
   );
   assert.equal(
     inferRegularPastBaseForm('stopped', [{ partOfSpeech: 'v.', meaning: '停止' }]),
-    'stop'
+    undefined
   );
 });
 

@@ -8,11 +8,32 @@ An open-source Chrome and Edge extension that makes HLTV easier to read in Chine
 
 > **Important:** this is an unpacked developer extension. It is not installed from the Chrome Web Store. Download the ZIP, extract it, and load the extracted folder from the browser's extension page.
 
+## v1.0.3 changes (2026-10-10)
+
+v1.0.3 includes the fixes below and the v1.0.2 development-stage improvements listed afterwards. See the detailed installation steps below and the package's `INSTALL.txt` for updating an existing installation.
+
+- **Review interactions:** answers and lemmas are hidden until revealed. Rating buttons lock while saving; failed saves keep the current word. Old responses cannot advance a restarted session. Each session uses a fixed snapshot of favorites, with filters and clearing disabled during review.
+- **Complete export:** All exports a deduplicated union of history and favorites. Favorites/review exports favorites, including entries no longer in history. Formula-like spreadsheet text receives a text prefix; CSV is not an automatically importable backup.
+- **Appearance saving:** controls persist only the changed field, so a font update cannot overwrite a different tab's theme/color. Failures show feedback while retaining the current preview.
+- **System pronunciation:** prefer an installed voice for the requested accent; explicitly report accent fallback, missing voices and playback failures. Closing a card or rendering a new result stops its previous playback.
+- **Settings protection:** stop saving if the latest settings cannot be read, preventing a stale draft from replacing changes elsewhere. Permission-revision write failures now produce feedback.
+
+The following v1.0.2 development-stage improvements are included as well:
+
+- **Official verification links:** dictionary cards link to the Oxford dictionary and Oxford 3000/5000 lists, including when model translation fails. No Oxford API, official dataset, or recording is integrated. Levels are labelled as model CEFR references; pronunciation buttons identify system speech.
+- **Definition parsing:** semicolons within one part of speech or an English explanation remain in that field instead of spilling into supplementary text.
+- **Base forms:** an omitted lemma is no longer guessed by stripping `ed`. Unknown bases are hidden; existing history is preserved and can be looked up again for verification.
+- **Record storage:** history/favorites reads, writes, and clears go through one background queue. Favorite buttons lock during saving and report errors. The history page refreshes on record changes.
+- **Continuous lookup:** responses retain later unsubmitted edits, caret, and input focus, with a notice identifying the query associated with the displayed result.
+- **Appearance:** open cards subscribe to system color changes and synchronize card theme, color, and font settings changed in another tab.
+
+See [Oxford data and licensing notes](docs/oxford-data.md). Actual browser operation remains pending verification after reload; this is not a claim of official-data integration or exhaustive Chinese coverage.
+
 ## v1.0.1 changes (2026-10-09)
 
 This update saves the current Chinese reading and dictionary experience. Compared with v1.0.0:
 
-- **Chinese-reader interface:** the popup returns to the original release layout. Popup, options, and history open in Chinese without a language or native-language selection step. Legacy English interface settings are normalized to Chinese-reader settings.
+- **Target audience:** Chinese-speaking users who want to read HLTV in Chinese.
 - **Dictionary layout:** parts of speech use abbreviations such as `n.`, `v.`, `adj.`, and `adv.`. A different verb base form appears at the bottom. Cards can display provider-returned CEFR levels, examples, and concise English definitions.
 - **Card settings:** font size, system/light/dark appearance, and five card colors are grouped behind the gear button. Color-choice text remains readable in dark mode.
 - **Separate settings close button:** the settings panel's × closes that panel; the header's × closes the entire dictionary card.
@@ -21,7 +42,7 @@ This update saves the current Chinese reading and dictionary experience. Compare
 - **History and study tools:** the dedicated history page adds favorites review and CSV export; entries can retain levels and examples.
 - **Translation style:** options offer natural Chinese or a more literal style for ordinary page text.
 
-Word and sentence lookup continue to work when page translation is off. Fallback providers, cached translations, and full-Chinese/bilingual modes remain available. The issues listed under **Known issues** remain outstanding; this release does not claim exhaustive coverage of every HLTV page in a real browser.
+Word and sentence lookup continue to work when page translation is off. Fallback providers, cached translations, and full-Chinese/bilingual modes remain available. v1.0.1 did not include the v1.0.3 fixes listed above.
 
 ## What it provides
 
@@ -31,7 +52,7 @@ Word and sentence lookup continue to work when page translation is off. Fallback
 - Offline glossary translation for confirmed navigation, filters, statistics, and fixed labels.
 - Article, sentence, and free-text translation through DeepSeek, OpenAI, or a custom OpenAI-compatible provider.
 - Optional fallback provider and IndexedDB translation cache for network failures.
-- Select a word to open an Oxford-style dictionary card with Chinese meanings, concise English explanations, parts of speech, verb base forms, UK/US IPA, pronunciation buttons, Oxford/CEFR levels such as B1, examples, editable lookup text, favorites, and resizing.
+- Select a word to open a learner dictionary card with Chinese meanings, concise English explanations, parts of speech, verb base forms, UK/US IPA, system pronunciation buttons, model CEFR references such as B1, examples, editable lookup text, favorites, and resizing.
 - Select a sentence or phrase to show a Chinese sentence translation, even when page translation is disabled.
 - Separate dictionary history and favorites page with review mode and CSV export.
 - Card-level light, dark, system theme, and font-size controls.
@@ -50,8 +71,8 @@ Choose either Chrome or Edge. Extract the package before loading it: the browser
 
 ### 1. Download and extract the package
 
-1. Open the [v1.0.1 release page](https://github.com/Chester-chs/cs2-hltv-zh-reader/releases/tag/v1.0.1).
-2. Expand **Assets** and download **`CS2-HLTV-Chinese-Reader-v1.0.1.zip`**. GitHub's **Source code** archives and **Code → Download ZIP** are source files, not the installable extension package.
+1. Open the [v1.0.3 release page](https://github.com/Chester-chs/cs2-hltv-zh-reader/releases/tag/v1.0.3).
+2. Expand **Assets** and download **`CS2-HLTV-Chinese-Reader-v1.0.3.zip`**. GitHub's **Source code** archives and **Code → Download ZIP** are source files, not the installable extension package.
 3. Find the downloaded ZIP in File Explorer, usually under Downloads. Right-click it, select **Extract All**, choose a permanent location such as `C:\Users\YourName\Documents\HLTV-Chinese-Reader`, and click **Extract**. Simply opening the ZIP preview does not extract it.
 4. Open the extracted folder and check that **`manifest.json` is directly inside it**. The correct layout is:
 
@@ -92,7 +113,7 @@ The extension can translate confirmed fixed labels without an API key. To transl
 Create an API key with your chosen provider and confirm access to the selected model. Installing the extension does not supply a key or API credits.
 
 1. Open an HLTV page, click the extension icon, and choose **服务商与首次设置**. You can also open the extension's **Details** page and choose **Extension options**.
-   - The settings page opens directly in Chinese; there is no interface-language or English-native setup step.
+   - The settings page uses a Chinese interface.
 2. In **Provider preset**, choose **DeepSeek**, **OpenAI**, or **Custom**.
    - DeepSeek preset: `https://api.deepseek.com`, model `deepseek-chat`.
    - OpenAI preset: `https://api.openai.com`, model `gpt-4o-mini`.
@@ -118,8 +139,7 @@ The extension does not translate team names, player names, scores, dates, live-s
 ### First-use setup
 
 - The popup and settings page open directly in Chinese for Chinese-native readers.
-- There is no English-native onboarding or interface-language selector.
-- The workflow keeps English word lookup, Chinese meanings, Oxford/CEFR levels, and Chinese page translation. Chinese reverse lookup is not offered.
+- The workflow keeps English word lookup, Chinese meanings, model CEFR references, and Chinese page translation. Chinese reverse lookup is not offered.
 
 ## Word lookup, sentence translation, history, and favorites
 
@@ -140,7 +160,7 @@ The extension does not translate team names, player names, scores, dates, live-s
 1. Download the new installation ZIP and extract it to a temporary folder. Confirm that `manifest.json` is directly inside it.
 2. Copy all new files and subfolders into the original folder your browser currently loads, replacing matching files. Keeping the same installation path normally preserves settings, history, and favorites.
 3. Open `chrome://extensions` or `edge://extensions`, find **CS2 HLTV Chinese Reader**, and click its circular-arrow **Reload** button after file replacement finishes.
-4. Confirm version **1.0.1**, then refresh every open HLTV tab. Refreshing a website alone does not reload extension code.
+4. Confirm version **1.0.3**, then refresh every open HLTV tab. Refreshing a website alone does not reload extension code.
 5. Open the popup and check the Chinese interface and display mode. If news translation fails, check permissions and run **测试连接** (test connection).
 
 Changing the installation path can give an unpacked extension a different identity, so settings, history, and favorites may not migrate automatically. Export CSV and retain your provider configuration before changing paths or removing the extension. CSV is not a full settings backup, and automatic import is not implemented.
@@ -173,13 +193,12 @@ Select the folder containing `manifest.json` directly. Do not select the downloa
 
 Open the browser's extensions page and check that the extension is enabled. Pin it from the Extensions menu. If the browser reports an error, open the extension's **Errors** panel and reload the current release folder after removing older copies.
 
-## Known issues
+## Known limitations
 
-- Semicolons inside one definition can split later meanings into a generic supplementary section.
-- If a provider omits the verb base form, the current fallback can infer an incorrect word, such as `liked` → `lik`. Base forms, IPA, and levels need checking.
-- Simultaneous history or favorite writes from multiple tabs can overwrite records. Repeated fast favorite clicks can also give unexpected results.
-- Editing a different query while a request is pending can lose those unsubmitted edits when its response arrives.
-- Already-open cards do not immediately synchronize every appearance change after a system theme change or an update in another tab.
+- Meanings, IPA, lemmas and CEFR references come from a model, not official Oxford data. Official links are provided for user verification.
+- System voices and accents depend on installed device voices; these are not Oxford recordings.
+- Existing history and cache are retained and may contain incorrect provider responses; look up words again and verify when needed.
+- The changes received source review, type checking and build checks; complete real-browser interaction verification remains outstanding.
 - Coverage depends on HLTV's page structure, and some pages may remain partly English. Offline cache reuse only covers previously cached content, not arbitrary new text.
 
 ## Provider and privacy

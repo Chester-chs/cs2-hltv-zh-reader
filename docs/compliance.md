@@ -1,5 +1,9 @@
 # Gate 3 Compliance and Third-Party Notes
 
+## Oxford dictionary follow-up (2026-10-09)
+
+The extension now links to official Oxford dictionary searches and word lists for user verification. It does not bundle Oxford entries, recordings, or word-list datasets and does not call the Oxford API. The owner has no API credentials or relevant licence and chose official verification links first. Model levels/IPA and system speech are explicitly distinguished from official data. Official sources, API restrictions, and the evidence for the search form URL are recorded in [oxford-data.md](oxford-data.md). This follow-up does not change the historical HLTV reconnaissance assessment below.
+
 Access date: 2026-09-20. This is a source-recording and risk document, not legal advice and not a permission to bypass any site rule.
 
 ## 1. HLTV robots.txt
